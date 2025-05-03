@@ -99,6 +99,7 @@ pub struct TrackerResponse {
     pub peers: Peers,
 }
 
+// NOTE: Use `cargo test -- --show-output`.
 #[cfg(test)]
 mod tests {
     use super::*;
