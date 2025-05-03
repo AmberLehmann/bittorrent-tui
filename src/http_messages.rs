@@ -1,5 +1,8 @@
-use bytes::{BufMut, BytesMut};
-use std::fmt::{Display, Write};
+use bytes::{BufMut, Bytes, BytesMut};
+use std::{
+    fmt::{Display, Write},
+    net::SocketAddr,
+};
 
 #[derive(Clone, Copy)]
 pub enum TrackerRequestEvent {
@@ -7,6 +10,7 @@ pub enum TrackerRequestEvent {
     Stopped,
     Completed,
 }
+
 impl Display for TrackerRequestEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -80,6 +84,19 @@ impl TrackerRequest {
         buf.put_slice(b" HTTP/1.1\r\n");
         buf
     }
+}
+
+// TODO: Add traits
+pub struct Peers(Vec<SocketAddr>);
+
+pub struct TrackerResponse {
+    pub warning_message: Option<Bytes>,
+    pub complete: u64,
+    pub interval: u64,
+    pub min_interval: Option<u64>,
+    pub tracker_id: Option<Bytes>,
+    pub incomplete: u64,
+    pub peers: Peers,
 }
 
 #[cfg(test)]
