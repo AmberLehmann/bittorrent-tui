@@ -21,6 +21,7 @@ impl Display for TrackerRequestEvent {
     }
 }
 
+// TODO: Probably want to create a type with traits
 type HashedId20 = [u8; 20];
 
 pub struct TrackerRequest {
@@ -51,7 +52,7 @@ impl TrackerRequest {
         )
         .unwrap();
         if let Some(current_event) = self.event {
-            write!(buf, "&event={}", current_event).unwrap();
+            write!(buf, "&event={current_event}").unwrap();
         }
         write!(
             buf,
@@ -65,16 +66,16 @@ impl TrackerRequest {
         )
         .unwrap();
         if let Some(addr) = self.ip {
-            write!(buf, "&ip={}", addr).unwrap();
+            write!(buf, "&ip={addr}").unwrap();
         }
         if let Some(num) = self.numwant {
-            write!(buf, "&numwant={}", num).unwrap();
+            write!(buf, "&numwant={num}").unwrap();
         }
         if let Some(k) = &self.key {
-            write!(buf, "&key={}", k).unwrap();
+            write!(buf, "&key={k}").unwrap();
         }
         if let Some(t) = &self.trackerid {
-            write!(buf, "&key={}", t).unwrap();
+            write!(buf, "&key={t}").unwrap();
         }
         buf.put_slice(b" HTTP/1.1\r\n");
         buf
@@ -86,7 +87,7 @@ mod tests {
     use super::*;
     use std::net::Ipv4Addr;
     #[test]
-    fn tracker_1() {
+    fn encode_1() {
         let tr = TrackerRequest {
             info_hash: *b"12345678901234567890",
             peer_id: *b"ABCDEFGHIJKLMNOPQRST",
@@ -102,8 +103,6 @@ mod tests {
             key: Some("secret".into()),
             trackerid: Some("trackster".into()),
         };
-        let bytes = tr.encode_http_get();
-        let output = std::str::from_utf8(&bytes).unwrap().to_string();
-        println!("{output}\n len:{}", bytes.len());
+        dbg!(tr.encode_http_get());
     }
 }
