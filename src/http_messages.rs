@@ -89,6 +89,7 @@ impl TrackerRequest {
 // TODO: Add traits
 pub struct Peers(Vec<SocketAddr>);
 
+// The tracker responds with "text/plain" document consisting of a bencoded dictionary with the following keys:
 pub struct TrackerResponse {
     pub warning_message: Option<Bytes>,
     pub complete: u64,
