@@ -86,9 +86,6 @@ impl TrackerRequest {
     }
 }
 
-// TODO: Add traits
-pub struct Peers(Vec<SocketAddr>);
-
 // The tracker responds with "text/plain" document consisting of a bencoded dictionary with the following keys:
 pub struct TrackerResponse {
     pub warning_message: Option<Bytes>,
@@ -97,8 +94,17 @@ pub struct TrackerResponse {
     pub min_interval: Option<u64>,
     pub tracker_id: Option<Bytes>,
     pub incomplete: u64,
-    pub peers: Peers,
+    pub peers: Vec<SocketAddr>,
 }
+
+// TODO: Custom Deserialization for Peers, should support compact format
+// fn deserialize_peers<'de, D>(
+//     deserializer: D,
+// ) -> Result<Vec<SocketAddr>, D::Error>
+// where
+//     D: de::Deserializer<'de>,
+// {
+//     struct Visitor;
 
 // NOTE: Use `cargo test -- --show-output`.
 #[cfg(test)]
