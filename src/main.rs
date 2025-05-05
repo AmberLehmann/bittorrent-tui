@@ -1,7 +1,7 @@
 use crate::logger::Logger;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use log::{error, info};
+use log::{error, info, trace};
 use metainfo::{Info, MetaInfo, SingleFileInfo};
 use ratatui::Frame;
 use ratatui::{
@@ -125,14 +125,14 @@ impl App {
         let mut file = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
-                error!("failed to open torrent file {:?}", e);
+                error!("Failed to open torrent file {:?}", e);
                 return;
             }
         };
 
         let mut data = Vec::new();
         let bytes_read = file.read_to_end(&mut data);
-        info!("open_trrent read {:?} bytes", bytes_read);
+        info!("open_torrent() read {:?} bytes", bytes_read);
 
         let new_meta: MetaInfo = match serde_bencode::from_bytes(&data) {
             Ok(t) => t,
