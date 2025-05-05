@@ -1,4 +1,4 @@
-use crate::logger::Logger;
+use crate::logger::{LogTab, Logger};
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use log::{error, info, trace};
@@ -49,8 +49,7 @@ enum AppTab {
 
 struct App {
     exit: bool,
-    logtext: Vec<(log::Level, String)>,
-    log_spans: [Span<'static>; 5],
+    log_tab: LogTab,
     rx: std::sync::mpsc::Receiver<(log::Level, String)>,
     selected_tab: AppTab,
     torrents: Vec<Torrent>,
@@ -60,14 +59,7 @@ impl App {
     pub fn new(rx: std::sync::mpsc::Receiver<(log::Level, String)>) -> Self {
         Self {
             exit: false,
-            logtext: Vec::new(),
-            log_spans: [
-                Span::styled("ERROR", Color::LightRed),
-                Span::styled("WARN", Color::Yellow),
-                Span::styled("INFO", Color::White),
-                Span::styled("DEBUG", Color::White),
-                Span::styled("TRACE", Color::White),
-            ],
+            log_tab: LogTab::new(),
             rx,
             selected_tab: AppTab::Downloads,
             torrents: Vec::new(),
@@ -82,7 +74,7 @@ impl App {
 
             // handle logging
             if let Ok(s) = self.rx.try_recv() {
-                self.logtext.push(s);
+                self.log_tab.push(s);
             }
 
             // handle bittorrent stuff
@@ -116,6 +108,8 @@ impl App {
             KeyCode::Char('p') | KeyCode::Char('2') => self.selected_tab = AppTab::Peers,
             KeyCode::Char('l') | KeyCode::Char('3') => self.selected_tab = AppTab::Log,
             KeyCode::Char('o') => self.open_torrent("./alice.torrent"),
+            KeyCode::Char('j') => self.log_tab.scroll_down(),
+            KeyCode::Char('k') => self.log_tab.scroll_up(),
             _ => {}
         }
         Ok(())
@@ -217,27 +211,6 @@ impl App {
         //.render(canvas, buf);
     }
 
-    fn render_log(&self, area: Rect, buf: &mut Buffer) {
-        let mut next_line = Rect { height: 1, ..area };
-
-        let visible_lines = if self.logtext.len() > area.height as usize {
-            &self.logtext[self.logtext.len() - area.height as usize..]
-        } else {
-            &self.logtext
-        };
-
-        for l in visible_lines {
-            // clones are fine here because Cow has lazy data clones
-            let mut line = Line::from(self.log_spans[l.0 as usize - 1].clone());
-            line.push_span(l.1.clone());
-            line.render(next_line, buf);
-            //Span::raw(l).render(next_line, buf);
-            next_line.y += 1;
-        }
-
-        // add scrollbar
-    }
-
     fn render_peers(&self, _area: Rect, _buf: &mut Buffer) {}
 }
 
@@ -293,7 +266,7 @@ impl Widget for &App {
         match self.selected_tab {
             AppTab::Downloads => self.render_downloads(inner_area, buf),
             AppTab::Peers => self.render_peers(inner_area, buf),
-            AppTab::Log => self.render_log(inner_area, buf),
+            AppTab::Log => self.log_tab.render(inner_area, buf),
         }
     }
 }
