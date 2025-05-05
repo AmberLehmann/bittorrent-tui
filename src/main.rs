@@ -1,7 +1,8 @@
 use crate::logger::Logger;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use log::trace;
+use log::{error, info};
+use metainfo::{Info, MetaInfo, SingleFileInfo};
 use ratatui::Frame;
 use ratatui::{
     buffer::Buffer,
@@ -12,7 +13,8 @@ use ratatui::{
     text::Line,
     widgets::{Block, Borders, Paragraph, Widget},
 };
-use std::io::Stdout;
+use std::fs::File;
+use std::io::{Read, Stdout};
 
 mod args;
 mod http_messages;
@@ -45,6 +47,7 @@ struct App {
     logtext: Vec<String>,
     rx: std::sync::mpsc::Receiver<String>,
     selected_tab: AppTab,
+    torrents: Vec<MetaInfo>,
 }
 
 impl App {
@@ -54,16 +57,22 @@ impl App {
             logtext: Vec::new(),
             rx,
             selected_tab: AppTab::Downloads,
+            torrents: Vec::new(),
         }
     }
+
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut Tui) -> Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
             self.handle_events()?;
+
+            // handle logging
             if let Ok(s) = self.rx.try_recv() {
                 self.logtext.push(s);
             }
+
+            // handle bittorrent stuff
         }
         Ok(())
     }
@@ -90,18 +99,44 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
         match key_event.code {
             KeyCode::Char('q') => self.exit = true,
-            KeyCode::Char('k') => trace!("AWd"),
             KeyCode::Char('d') | KeyCode::Char('1') => self.selected_tab = AppTab::Downloads,
             KeyCode::Char('p') | KeyCode::Char('2') => self.selected_tab = AppTab::Peers,
             KeyCode::Char('l') | KeyCode::Char('3') => self.selected_tab = AppTab::Log,
+            KeyCode::Char('o') => self.open_torrent("./alice.torrent"),
             _ => {}
         }
         Ok(())
     }
 
+    fn open_torrent(&mut self, path: &str) {
+        let mut file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => {
+                error!("failed to open torrent file {:?}", e);
+                return;
+            }
+        };
+
+        let mut data = Vec::new();
+        let bytes_read = file.read_to_end(&mut data);
+        info!("open_trrent read {:?} bytes", bytes_read);
+
+        let new_torrent = match serde_bencode::from_bytes(&data) {
+            Ok(t) => t,
+            Err(e) => {
+                error!("{}", e);
+                return;
+            }
+        };
+
+        self.torrents.push(new_torrent);
+    }
+
+    // RENDERING CODE
+
     fn render_downloads(&self, area: Rect, buf: &mut Buffer) {
         let vertical = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]);
-        let [title_bar, canvas] = vertical.areas(area);
+        let [title_bar, mut canvas] = vertical.areas(area);
         let horizontal = Layout::horizontal([
             Constraint::Length(2),  // icon
             Constraint::Min(20),    // name
@@ -125,10 +160,20 @@ impl App {
             Span::raw(t).render(title_bar_areas[i], buf);
         }
 
-        let [_icon, _name, _size, _progress, _status, _seeds, _peers, _speed, _todo] =
-            horizontal.areas(canvas);
+        for torrent in &self.torrents {
+            let [_icon, name, size, _progress, _status, _seeds, _peers, _speed, _todo] =
+                horizontal.areas(canvas);
 
-        //for (index, download) in self.downloads.iter().enumerate() {}
+            match &torrent.info {
+                Info::Multi(_) => {}
+                Info::Single(f) => {
+                    Span::raw(&f.name).render(name, buf);
+                    Span::raw(format!("{}", f.length)).render(size, buf);
+                }
+            }
+
+            canvas.y += 1;
+        }
 
         Paragraph::new(vec![
             Line::from(vec![

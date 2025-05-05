@@ -4,7 +4,7 @@ use std::{
     net::SocketAddr,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum TrackerRequestEvent {
     Started,
     Stopped,
@@ -28,6 +28,7 @@ impl Display for TrackerRequestEvent {
 // TODO: Probably want to create a type with traits
 type HashedId20 = [u8; 20];
 
+#[derive(Debug)]
 pub struct TrackerRequest {
     pub info_hash: HashedId20,
     pub peer_id: HashedId20,

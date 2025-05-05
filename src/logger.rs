@@ -1,4 +1,4 @@
-use log::{LevelFilter, Log, Metadata, Record, SetLoggerError};
+use log::{Level, LevelFilter, Log, Metadata, Record, SetLoggerError};
 
 pub struct Logger {
     pub client: std::sync::mpsc::Sender<String>,
@@ -15,15 +15,15 @@ impl Logger {
 }
 
 impl Log for Logger {
-    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
         true
     }
     fn log(&self, record: &Record<'_>) {
         self.client
             .send(format!(
-                "[{}] {}: {}\n",
+                "{}: {}\n",
                 record.level(),
-                record.target(),
+                //record.target(),
                 record.args()
             ))
             .unwrap()
