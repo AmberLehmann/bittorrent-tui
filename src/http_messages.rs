@@ -1,9 +1,13 @@
 use bytes::{BufMut, Bytes, BytesMut};
-use serde::Deserialize;
+use serde::{
+    de::{self, Visitor},
+    Deserialize,
+};
 use serde_bytes::ByteBuf;
 use std::{
     fmt::{Display, Write},
-    net::SocketAddr,
+    io::Read,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -92,27 +96,71 @@ impl TrackerRequest {
 // The tracker responds with "text/plain" document consisting of a bencoded dictionary with the following keys:
 #[derive(Debug, Deserialize)]
 pub struct TrackerResponse {
+    #[serde(rename = "warning message")]
     pub warning_message: Option<ByteBuf>,
     pub complete: u64,
     pub interval: u64,
+    #[serde(rename = "min interval")]
     pub min_interval: Option<u64>,
+    #[serde(rename = "tracker_id")]
     pub tracker_id: Option<ByteBuf>,
     pub incomplete: u64,
-    // pub peers: Peers, // TODO: Implement Deserialize
-}
-
-pub struct Peers {
-    addrs: Vec<SocketAddr>,
+    #[serde(deserialize_with = "deserialize_peers")]
+    pub peers: Vec<SocketAddr>,
 }
 
 // TODO: Custom Deserialization for Peers, should support compact format
-// fn deserialize_peers<'de, D>(
-//     deserializer: D,
-// ) -> Result<Vec<SocketAddr>, D::Error>
-// where
-//     D: de::Deserializer<'de>,
-// {
-//     struct Visitor;
+fn deserialize_peers<'de, D>(deserializer: D) -> Result<Vec<SocketAddr>, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    struct Visitor;
+    impl<'de> de::Visitor<'de> for Visitor {
+        type Value = Vec<SocketAddr>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter
+                .write_str("bencoded dictionary or compact byte representation of list of peers")
+        }
+        // Deserialize Compact Format
+        fn visit_bytes<E>(self, b: &[u8]) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let mut peers = Vec::new();
+            for chunk in b.chunks_exact(6) {
+                let ip_addr = Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]);
+                let port: u16 = u16::from_be_bytes([chunk[4], chunk[5]]);
+                let peer = SocketAddr::new(IpAddr::V4(ip_addr), port);
+                peers.push(peer);
+            }
+            Ok(peers)
+        }
+
+        // Deserialize bencoded dictionary
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::SeqAccess<'de>,
+        {
+            #[derive(Debug, Deserialize)]
+            struct TempPeer {
+                ip: String,
+                port: u16,
+            }
+            // size_hint() gets the size if included in the SeqAccess
+            let mut peers = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+            while let Some(TempPeer { ip, port }) = seq.next_element()? {
+                let ip = match ip.parse() {
+                    Ok(v) => v,
+                    _ => continue,
+                };
+                peers.push(SocketAddr::new(ip, port));
+            }
+            Ok(peers)
+        }
+    }
+    deserializer.deserialize_any(Visitor)
+}
 
 // NOTE: Use `cargo test -- --show-output`.
 #[cfg(test)]
