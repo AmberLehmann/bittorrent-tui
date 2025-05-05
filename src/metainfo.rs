@@ -43,7 +43,7 @@ pub enum Info {
 #[derive(Debug, Deserialize)]
 pub struct MetaInfo {
     pub info: Info,
-    pub announce: Option<String>, // TODO: REMOVE AFTER TESTING
+    pub announce: String,
     #[serde(rename = "announce-list")]
     pub announce_list: Option<Vec<Vec<String>>>,
     pub creation_date: Option<usize>,

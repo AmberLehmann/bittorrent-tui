@@ -12,6 +12,7 @@ color-eyre = "0.6.4"
 crossterm = "0.29.0"
 log = { version = "0.4.27", features = ["std"] }
 ratatui = "0.29.0"
+regex = "1.11.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_bencode = "0.2.4"
 serde_bytes = "0.11.17"

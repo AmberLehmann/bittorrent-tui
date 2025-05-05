@@ -1,7 +1,6 @@
 // use crate::args::Args;
 use crate::logger::{LogTab, Logger};
 
-use clap::Parser;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use log::{error, info, trace};
@@ -16,9 +15,11 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Widget},
     Frame,
 };
+use regex::Regex;
 use std::{
     fs::File,
     io::{Read, Stdout},
+    net::{SocketAddr, ToSocketAddrs},
 };
 
 mod args;
@@ -31,6 +32,7 @@ type Tui = Terminal<CrosstermBackend<Stdout>>;
 
 pub struct Torrent {
     meta_info: MetaInfo,
+    tracker_addr: SocketAddr,
     //pieces_downloaded: Vec<bool>,
 }
 
@@ -56,6 +58,7 @@ enum AppTab {
 
 struct App {
     exit: bool,
+    hostname_regex: Regex,
     log_tab: LogTab,
     rx: std::sync::mpsc::Receiver<(log::Level, String)>,
     selected_tab: AppTab,
@@ -66,6 +69,7 @@ impl App {
     pub fn new(rx: std::sync::mpsc::Receiver<(log::Level, String)>) -> Self {
         Self {
             exit: false,
+            hostname_regex: Regex::new(r"(?P<proto>https?|udp)://(?P<name>[^/]+)").unwrap(),
             log_tab: LogTab::new(),
             rx,
             selected_tab: AppTab::Downloads,
@@ -120,7 +124,7 @@ impl App {
             KeyCode::Char('d') | KeyCode::Char('1') => self.selected_tab = AppTab::Downloads,
             KeyCode::Char('p') | KeyCode::Char('2') => self.selected_tab = AppTab::Peers,
             KeyCode::Char('l') | KeyCode::Char('3') => self.selected_tab = AppTab::Log,
-            KeyCode::Char('o') => self.open_torrent("./alice.torrent"),
+            KeyCode::Char('o') => self.open_torrent("./ubuntu-25.04-desktop-amd64.iso.torrent"),
             KeyCode::Char('j') => self.log_tab.scroll_down(),
             KeyCode::Char('k') => self.log_tab.scroll_up(),
             _ => {}
@@ -149,13 +153,39 @@ impl App {
             }
         };
 
-        let new_torrent = match new_meta.info {
-            Info::Single(ref f) => {
-                let num_pieces = 1;
-                Torrent {
-                    meta_info: new_meta,
+        info!("tracker addr {}", new_meta.announce);
+        let Some(caps) = self.hostname_regex.captures(&new_meta.announce) else {
+            error!("Unable to parse tracker URL");
+            return;
+        };
+        let proto = caps.name("proto").unwrap();
+        if proto.as_str() == "udp" {
+            error!("UDP trackers are not supported");
+            return;
+        }
+
+        let hostname = caps.name("name").unwrap();
+        let ip = match format!("{}:80", hostname.as_str()).to_socket_addrs() {
+            Ok(mut ip_iter) => {
+                let ip_opt = ip_iter.next();
+                if let Some(ip) = ip_opt {
+                    ip
+                } else {
+                    error!("Unable to resolve Tracker URL");
+                    return;
                 }
             }
+            Err(e) => {
+                error!("{}", e);
+                return;
+            }
+        };
+
+        let new_torrent = match new_meta.info {
+            Info::Single(_) => Torrent {
+                meta_info: new_meta,
+                tracker_addr: ip,
+            },
             Info::Multi(_) => {
                 error!("Multifile mode currently not supported");
                 return;
