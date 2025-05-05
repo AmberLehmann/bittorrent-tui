@@ -1,4 +1,6 @@
 use bytes::{BufMut, Bytes, BytesMut};
+use serde::Deserialize;
+use serde_bytes::ByteBuf;
 use std::{
     fmt::{Display, Write},
     net::SocketAddr,
@@ -88,14 +90,19 @@ impl TrackerRequest {
 }
 
 // The tracker responds with "text/plain" document consisting of a bencoded dictionary with the following keys:
+#[derive(Debug, Deserialize)]
 pub struct TrackerResponse {
-    pub warning_message: Option<Bytes>,
+    pub warning_message: Option<ByteBuf>,
     pub complete: u64,
     pub interval: u64,
     pub min_interval: Option<u64>,
-    pub tracker_id: Option<Bytes>,
+    pub tracker_id: Option<ByteBuf>,
     pub incomplete: u64,
-    pub peers: Vec<SocketAddr>,
+    // pub peers: Peers, // TODO: Implement Deserialize
+}
+
+pub struct Peers {
+    addrs: Vec<SocketAddr>,
 }
 
 // TODO: Custom Deserialization for Peers, should support compact format
