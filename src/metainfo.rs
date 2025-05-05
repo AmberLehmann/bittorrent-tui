@@ -9,13 +9,13 @@ pub struct SingleFileInfo {
     pub private: Option<u32>,
 
     pub name: String,
-    pub length: u32,
+    pub length: u64,
     pub md5sum: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct File {
-    pub length: u32,
+    pub length: u64,
     pub md5sum: Option<String>,
     pub path: Vec<String>,
 }
