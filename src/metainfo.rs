@@ -3,7 +3,7 @@ use serde_bytes::ByteBuf;
 
 #[derive(Debug, Deserialize)]
 pub struct SingleFileInfo {
-    #[serde(alias = "piece length")]
+    #[serde(rename = "piece length")]
     pub piece_length: u32,
     pub pieces: ByteBuf,
     pub private: Option<u32>,
@@ -22,7 +22,7 @@ pub struct File {
 
 #[derive(Debug, Deserialize)]
 pub struct MultiFileInfo {
-    #[serde(alias = "piece length")]
+    #[serde(rename = "piece length")]
     pub piece_length: u32,
     pub pieces: ByteBuf,
     pub private: Option<u32>,
@@ -44,6 +44,7 @@ pub enum Info {
 pub struct MetaInfo {
     pub info: Info,
     pub announce: Option<String>, // TODO: REMOVE AFTER TESTING
+    #[serde(rename = "announce-list")]
     pub announce_list: Option<Vec<Vec<String>>>,
     pub creation_date: Option<usize>,
     pub comment: Option<String>,
