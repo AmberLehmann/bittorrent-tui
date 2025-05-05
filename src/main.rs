@@ -21,7 +21,12 @@ mod http_messages;
 mod logger;
 mod metainfo;
 
-pub type Tui = Terminal<CrosstermBackend<Stdout>>;
+type Tui = Terminal<CrosstermBackend<Stdout>>;
+
+pub struct Torrent {
+    meta_info: MetaInfo,
+    //pieces_downloaded: Vec<bool>,
+}
 
 fn main() -> Result<()> {
     let mut terminal = ratatui::init();
@@ -47,7 +52,7 @@ struct App {
     logtext: Vec<String>,
     rx: std::sync::mpsc::Receiver<String>,
     selected_tab: AppTab,
-    torrents: Vec<MetaInfo>,
+    torrents: Vec<Torrent>,
 }
 
 impl App {
@@ -121,10 +126,23 @@ impl App {
         let bytes_read = file.read_to_end(&mut data);
         info!("open_trrent read {:?} bytes", bytes_read);
 
-        let new_torrent = match serde_bencode::from_bytes(&data) {
+        let new_meta: MetaInfo = match serde_bencode::from_bytes(&data) {
             Ok(t) => t,
             Err(e) => {
                 error!("{}", e);
+                return;
+            }
+        };
+
+        let new_torrent = match new_meta.info {
+            Info::Single(ref f) => {
+                let num_pieces = 1;
+                Torrent {
+                    meta_info: new_meta,
+                }
+            }
+            Info::Multi(_) => {
+                error!("Multifile mode not supported");
                 return;
             }
         };
@@ -164,7 +182,7 @@ impl App {
             let [_icon, name, size, _progress, _status, _seeds, _peers, _speed, _todo] =
                 horizontal.areas(canvas);
 
-            match &torrent.info {
+            match &torrent.meta_info.info {
                 Info::Multi(_) => {}
                 Info::Single(f) => {
                     Span::raw(&f.name).render(name, buf);
@@ -175,44 +193,20 @@ impl App {
             canvas.y += 1;
         }
 
-        Paragraph::new(vec![
-            Line::from(vec![
-                Span::styled("🡅 ", Style::new().fg(Color::LightGreen)),
-                Span::styled(
-                    "minecraft-movie-but-real-this-time      1.4 GiB  ",
-                    Style::new(),
-                ),
-                Span::styled(
-                    "    50",
-                    Style::new().fg(Color::Black).bg(Color::LightGreen),
-                ),
-                Span::styled("%     ", Style::new().fg(Color::Black).bg(Color::Gray)),
-                Span::styled("  Seeding  0/250    4/7    7.9 MiB/s   999.7", Style::new()),
-            ]),
-            Line::from(vec![
-                Span::styled("🡅 ", Style::new().fg(Color::LightGreen)),
-                Span::styled(
-                    "totally-not-a-digital-cat              35.8 GiB  ",
-                    Style::new(),
-                ),
-                Span::styled(
-                    "   100%     ",
-                    Style::new().fg(Color::Black).bg(Color::LightGreen),
-                ),
-                Span::styled("  Seeding  78/170  14/50  43.1 MiB/s     2.5", Style::new()),
-            ]),
-            Line::from(vec![
-                Span::styled("🡅 ", Style::new().fg(Color::LightGreen)),
-                Span::styled(
-                    "also-the-minecraft-movie                7.2 KiB  ",
-                    Style::new(),
-                ),
-                Span::styled("    ", Style::new().fg(Color::Black).bg(Color::LightGreen)),
-                Span::styled("30%     ", Style::new().fg(Color::Black).bg(Color::Gray)),
-                Span::styled("  Seeding  0/250    4/7    7.9 MiB/s   999.7", Style::new()),
-            ]),
-        ])
-        .render(canvas, buf);
+        //Paragraph::new(vec![Line::from(vec![
+        //    Span::styled("🡅 ", Style::new().fg(Color::LightGreen)),
+        //    Span::styled(
+        //        "minecraft-movie-but-real-this-time      1.4 GiB  ",
+        //        Style::new(),
+        //    ),
+        //    Span::styled(
+        //        "    50",
+        //        Style::new().fg(Color::Black).bg(Color::LightGreen),
+        //    ),
+        //    Span::styled("%     ", Style::new().fg(Color::Black).bg(Color::Gray)),
+        //    Span::styled("  Seeding  0/250    4/7    7.9 MiB/s   999.7", Style::new()),
+        //])])
+        //.render(canvas, buf);
     }
 
     fn render_log(&self, area: Rect, buf: &mut Buffer) {

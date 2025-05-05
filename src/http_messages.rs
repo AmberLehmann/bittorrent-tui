@@ -26,7 +26,7 @@ impl Display for TrackerRequestEvent {
 }
 
 // TODO: Probably want to create a type with traits
-type HashedId20 = [u8; 20];
+pub type HashedId20 = [u8; 20];
 
 #[derive(Debug)]
 pub struct TrackerRequest {

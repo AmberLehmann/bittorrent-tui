@@ -1,14 +1,20 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde_bytes::ByteBuf;
 
 #[derive(Debug, Deserialize)]
 pub struct SingleFileInfo {
+    #[serde(alias = "piece length")]
+    pub piece_length: u32,
+    pub pieces: ByteBuf,
+    pub private: Option<u32>,
+
     pub name: String,
     pub length: u32,
     pub md5sum: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct FileInfo {
+pub struct File {
     pub length: u32,
     pub md5sum: Option<String>,
     pub path: Vec<String>,
@@ -16,14 +22,20 @@ pub struct FileInfo {
 
 #[derive(Debug, Deserialize)]
 pub struct MultiFileInfo {
+    #[serde(alias = "piece length")]
+    pub piece_length: u32,
+    pub pieces: ByteBuf,
+    pub private: Option<u32>,
+
     pub name: String,
-    pub files: Vec<FileInfo>,
+    pub files: Vec<File>,
 }
 
 #[derive(Debug, Deserialize)]
 pub enum Info {
     #[serde(untagged)]
     Single(SingleFileInfo),
+
     #[serde(untagged)]
     Multi(MultiFileInfo),
 }

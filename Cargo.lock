@@ -121,6 +121,7 @@ dependencies = [
  "ratatui",
  "serde",
  "serde_bencode",
+ "serde_bytes",
  "sha1",
  "urlencoding",
 ]
