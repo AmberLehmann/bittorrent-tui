@@ -156,7 +156,7 @@ impl App {
                 }
             }
             Info::Multi(_) => {
-                error!("Multifile mode not supported");
+                error!("Multifile mode currently not supported");
                 return;
             }
         };
