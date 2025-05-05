@@ -14,6 +14,10 @@ To run the BitTorrent client in TUI mode:
 | `j` | Scroll Down |
 | `k` | Scroll Up |
 
+## Logging
+The Logs Tab will include information about the state of the program. If an error occurs, an Error will be printed here.
+If anything is not working as expected, check the Logs tab for Errors.
+
 ## Supported Features
 
 ## Unsupported Features (May come soon)
