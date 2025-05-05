@@ -77,7 +77,13 @@ impl App {
                 self.log_tab.push(s);
             }
 
-            // handle bittorrent stuff
+            // TODO: handle bittorrent stuff
+
+            // TODO: check socket assosciated with each active torrent for information from tracker
+            // if new peers have been found or this is the first reponse send that information to
+            // worker threads.
+
+            // TODO: send periodic updates to tracker for each active torrent
         }
         Ok(())
     }
