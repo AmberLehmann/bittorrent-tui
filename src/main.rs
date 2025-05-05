@@ -49,17 +49,25 @@ enum AppTab {
 
 struct App {
     exit: bool,
-    logtext: Vec<String>,
-    rx: std::sync::mpsc::Receiver<String>,
+    logtext: Vec<(log::Level, String)>,
+    log_spans: [Span<'static>; 5],
+    rx: std::sync::mpsc::Receiver<(log::Level, String)>,
     selected_tab: AppTab,
     torrents: Vec<Torrent>,
 }
 
 impl App {
-    pub fn new(rx: std::sync::mpsc::Receiver<String>) -> Self {
+    pub fn new(rx: std::sync::mpsc::Receiver<(log::Level, String)>) -> Self {
         Self {
             exit: false,
             logtext: Vec::new(),
+            log_spans: [
+                Span::styled("ERROR", Color::LightRed),
+                Span::styled("WARN", Color::Yellow),
+                Span::styled("INFO", Color::White),
+                Span::styled("DEBUG", Color::White),
+                Span::styled("TRACE", Color::White),
+            ],
             rx,
             selected_tab: AppTab::Downloads,
             torrents: Vec::new(),
@@ -219,7 +227,11 @@ impl App {
         };
 
         for l in visible_lines {
-            Span::raw(l).render(next_line, buf);
+            // clones are fine here because Cow has lazy data clones
+            let mut line = Line::from(self.log_spans[l.0 as usize - 1].clone());
+            line.push_span(l.1.clone());
+            line.render(next_line, buf);
+            //Span::raw(l).render(next_line, buf);
             next_line.y += 1;
         }
 
