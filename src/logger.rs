@@ -18,6 +18,7 @@ impl Log for Logger {
     fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
         true
     }
+
     fn log(&self, record: &Record<'_>) {
         self.client
             .send((
@@ -34,5 +35,6 @@ impl Log for Logger {
             ))
             .unwrap()
     }
+
     fn flush(&self) {}
 }
