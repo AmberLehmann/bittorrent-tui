@@ -1,9 +1,11 @@
+use crate::args::Args;
 use crate::logger::{LogTab, Logger};
+
+use clap::Parser;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use log::{error, info, trace};
 use metainfo::{Info, MetaInfo, SingleFileInfo};
-use ratatui::Frame;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -12,9 +14,12 @@ use ratatui::{
     symbols::border,
     text::Line,
     widgets::{Block, Borders, Paragraph, Widget},
+    Frame,
 };
-use std::fs::File;
-use std::io::{Read, Stdout};
+use std::{
+    fs::File,
+    io::{Read, Stdout},
+};
 
 mod args;
 mod http_messages;
@@ -29,6 +34,7 @@ pub struct Torrent {
 }
 
 fn main() -> Result<()> {
+    let args = Args::parse();
     let mut terminal = ratatui::init();
 
     let (tx, rx) = std::sync::mpsc::channel();
