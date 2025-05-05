@@ -1,4 +1,4 @@
-use crate::args::Args;
+// use crate::args::Args;
 use crate::logger::{LogTab, Logger};
 
 use clap::Parser;
@@ -34,7 +34,7 @@ pub struct Torrent {
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    // let args = Args::parse();
     let mut terminal = ratatui::init();
 
     let (tx, rx) = std::sync::mpsc::channel();
@@ -243,35 +243,32 @@ impl Widget for &App {
         let selected = Style::new().fg(Color::Black).bg(Color::LightBlue);
         let default_style = Style::new();
 
-        Line::from_iter(
-            [
-                Span::styled(
-                    " Downloads ",
-                    if self.selected_tab == AppTab::Downloads {
-                        selected
-                    } else {
-                        default_style
-                    },
-                ),
-                Span::styled(
-                    " Peers ",
-                    if self.selected_tab == AppTab::Peers {
-                        selected
-                    } else {
-                        default_style
-                    },
-                ),
-                Span::styled(
-                    " Log ",
-                    if self.selected_tab == AppTab::Log {
-                        selected
-                    } else {
-                        default_style
-                    },
-                ),
-            ]
-            .into_iter(),
-        )
+        Line::from_iter([
+            Span::styled(
+                " Downloads ",
+                if self.selected_tab == AppTab::Downloads {
+                    selected
+                } else {
+                    default_style
+                },
+            ),
+            Span::styled(
+                " Peers ",
+                if self.selected_tab == AppTab::Peers {
+                    selected
+                } else {
+                    default_style
+                },
+            ),
+            Span::styled(
+                " Log ",
+                if self.selected_tab == AppTab::Log {
+                    selected
+                } else {
+                    default_style
+                },
+            ),
+        ])
         .right_aligned()
         .render(tab_list_area, buf);
 
