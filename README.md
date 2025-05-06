@@ -14,12 +14,21 @@ To run the BitTorrent client in TUI mode:
 | `j` | Scroll Down |
 | `k` | Scroll Up |
 
+
 ## Logging
 The Logs Tab will include information about the state of the program. If an error occurs, an Error will be printed here.
 If anything is not working as expected, check the Logs tab for Errors.
 
 ## Supported Features
+- Performant TUI interface
+- Logging with 5 log levels (trace, debug, info, warning, error)
 
 ## Unsupported Features (May come soon)
-- Multifile Mode
+- Support for UDP trackers
+- Support for HTTP trackers
+- Multi-file Mode
+- Rarest first piece downloading strategy
+- Endgame mode
+- BitTyrant
+- PropShare
 

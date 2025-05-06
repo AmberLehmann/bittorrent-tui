@@ -1,12 +1,12 @@
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{BufMut, BytesMut};
+use log::{error, trace};
 use serde::{
-    de::{self, Visitor},
+    de::{self},
     Deserialize,
 };
 use serde_bytes::ByteBuf;
 use std::{
     fmt::{Display, Write},
-    io::Read,
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
@@ -127,6 +127,7 @@ where
         where
             E: de::Error,
         {
+            trace!("Deserializing peers in compact format.");
             let mut peers = Vec::new();
             for chunk in b.chunks_exact(6) {
                 let ip_addr = Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]);
@@ -142,6 +143,7 @@ where
         where
             A: de::SeqAccess<'de>,
         {
+            trace!("Deserializing peers in dictionary format.");
             #[derive(Debug, Deserialize)]
             struct TempPeer {
                 ip: String,
@@ -152,7 +154,10 @@ where
             while let Some(TempPeer { ip, port }) = seq.next_element()? {
                 let ip = match ip.parse() {
                     Ok(v) => v,
-                    _ => continue,
+                    _ => {
+                        error!("Could not parse bencoded struct");
+                        continue;
+                    }
                 };
                 peers.push(SocketAddr::new(ip, port));
             }
