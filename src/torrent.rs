@@ -33,14 +33,14 @@ pub struct Torrent {
 impl Torrent {
     pub fn open(path: &str) -> Result<Torrent, OpenTorrentError> {
         let hostname_regex = Regex::new(r"(?P<proto>https?|udp)://(?P<name>[^/]+)").unwrap();
-        let mut file = File::open(path).or_else(|e| Err(OpenTorrentError::FailedToOpen(e)))?;
+        let mut file = File::open(path).map_err(OpenTorrentError::FailedToOpen)?;
 
         let mut data = Vec::new();
         let bytes_read = file.read_to_end(&mut data);
         info!("open_torrent() read {:?} bytes", bytes_read);
 
-        let new_meta: MetaInfo = serde_bencode::from_bytes(&data)
-            .or_else(|e| Err(OpenTorrentError::FailedToDecode(e)))?;
+        let new_meta: MetaInfo =
+            serde_bencode::from_bytes(&data).map_err(OpenTorrentError::FailedToDecode)?;
 
         info!("Tracker address: {}", new_meta.announce);
         let Some(caps) = hostname_regex.captures(&new_meta.announce) else {
