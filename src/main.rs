@@ -4,11 +4,14 @@ use color_eyre::Result;
 
 mod args;
 mod handshake;
-mod http_messages;
 mod logger;
 mod metainfo;
 mod torrent;
+mod tracker;
 mod tui;
+
+pub type PeerId20 = [u8; 20];
+pub type HashedId20 = [u8; 20];
 
 fn main() -> Result<()> {
     // let args = Args::parse();

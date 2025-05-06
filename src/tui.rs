@@ -1,7 +1,7 @@
 use crate::{
     logger::LogTab,
     metainfo::{Info, MetaInfo, SingleFileInfo},
-    torrent::{OpenTorrentError, Torrent, TorrentStatus},
+    torrent::{Torrent, TorrentStatus},
 };
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
@@ -114,7 +114,6 @@ impl App {
             }
         };
         // send out initial request to
-
         self.torrents.push(new_torrent);
     }
 

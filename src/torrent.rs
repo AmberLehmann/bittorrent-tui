@@ -50,7 +50,7 @@ impl Torrent {
 
         let mut data = Vec::new();
         let bytes_read = file.read_to_end(&mut data);
-        info!("open_torrent() read {:?} bytes", bytes_read);
+        info!("open_torrent() read {:?} bytes", bytes_read.unwrap_or(0));
 
         let new_meta: MetaInfo =
             serde_bencode::from_bytes(&data).map_err(OpenTorrentError::FailedToDecode)?;

@@ -10,6 +10,8 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
+use crate::{HashedId20, PeerId20};
+
 #[derive(Debug)]
 pub enum TrackerError {
     FailedToDecode(serde_bencode::Error),
@@ -51,12 +53,11 @@ impl Display for TrackerRequestEvent {
 }
 
 // TODO: Probably want to create a type with traits
-pub type HashedId20 = [u8; 20];
 
 #[derive(Debug)]
 pub struct TrackerRequest {
     pub info_hash: HashedId20,
-    pub peer_id: HashedId20,
+    pub peer_id: PeerId20,
     pub event: Option<TrackerRequestEvent>,
     pub port: u16,
     pub uploaded: u64,
@@ -128,7 +129,7 @@ pub struct TrackerResponse {
     pub peers: Vec<SocketAddr>,
 }
 
-// TODO: Custom Deserialization for Peers, should support compact format
+// Custom Deserialization for Peers, should support compact format
 fn deserialize_peers<'de, D>(deserializer: D) -> Result<Vec<SocketAddr>, D::Error>
 where
     D: de::Deserializer<'de>,
