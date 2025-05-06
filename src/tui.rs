@@ -228,6 +228,7 @@ impl App {
 
 const UNITS: [&'static str; 7] = ["B", "KiB", "MiB", "GiB", "Tib", "PiB", "EiB"];
 
+// TODO: add fractional part (probably using floats) and store output to reduce cost
 fn convert_to_human(bytes: u64) -> String {
     for i in 1..=6 {
         if bytes >> (i * 10) == 0 {
