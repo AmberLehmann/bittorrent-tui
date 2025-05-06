@@ -1,13 +1,12 @@
-use bytes::{BufMut, Bytes, BytesMut};
-use log::{error, info, trace};
+use bytes::{BufMut, BytesMut};
+use log::{error, trace};
 use serde::{
-    de::{self, Visitor},
+    de::{self},
     Deserialize,
 };
 use serde_bytes::ByteBuf;
 use std::{
     fmt::{Display, Write},
-    io::Read,
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
