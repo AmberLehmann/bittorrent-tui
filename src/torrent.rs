@@ -31,9 +31,29 @@ impl Display for OpenTorrentError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TorrentStatus {
-    Waiting,   // signifies that this torrent is awaiting a response from the tracker
-    Connected, // connection has been established with the tracker
+    Waiting,     // signifies that this torrent is awaiting a response from the tracker
+    Connected,   // connection has been established with the tracker
+    Downloading, // connected and downloading/seeding
+    Seeding,     // connected, Ddwnload completed, and seeding
+    Paused,      // conected?
+}
+
+impl Display for TorrentStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                TorrentStatus::Waiting => "Waiting",
+                TorrentStatus::Connected => "Connected",
+                TorrentStatus::Downloading => "Downloading",
+                TorrentStatus::Seeding => "Seeding",
+                TorrentStatus::Paused => "Paused",
+            }
+        )
+    }
 }
 
 pub struct Torrent {

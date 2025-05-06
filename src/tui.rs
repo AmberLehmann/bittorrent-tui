@@ -146,13 +146,14 @@ impl App {
         }
 
         for torrent in &self.torrents {
-            let [_icon, name, size, _progress, _status, _seeds, _peers, _speed, _todo] =
+            let [_icon, name, size, _progress, status, _seeds, _peers, _speed, _todo] =
                 horizontal.areas(canvas);
 
             match &torrent.meta_info.info {
                 Info::Multi(_) => {}
                 Info::Single(f) => {
                     Span::raw(&f.name).render(name, buf);
+                    Span::raw(format!("{}", torrent.status)).render(status, buf);
                     Span::raw(convert_to_human(f.length)).render(size, buf);
                 }
             }
