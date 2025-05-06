@@ -1,5 +1,6 @@
 ## Rusty Implementation of BitTorrent 
-WIP BitTorrent client implementation for CMSC417 written in Rust. 
+WIP BitTorrent client implementation for CMSC417 written in Rust.
+
 ## Usage
 To run the BitTorrent client in TUI mode: 
 `cargo run`
@@ -24,6 +25,7 @@ If anything is not working as expected, check the Logs tab for Errors.
 - Logging with 5 log levels (trace, debug, info, warning, error)
 
 ## Unsupported Features (May come soon)
+- Optional arguments passed through command line
 - Support for UDP trackers
 - Support for HTTP trackers
 - Multi-file Mode
