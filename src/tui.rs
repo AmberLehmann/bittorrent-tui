@@ -196,15 +196,15 @@ impl Widget for &App {
         block.render(area, buf);
 
         Line::from_iter([
-            Span::styled(" ", self.get_style(AppTab::Downloads)),
-            Span::styled("D", self.get_style(AppTab::Downloads).underlined()),
-            Span::styled("ownloads ", self.get_style(AppTab::Downloads)),
-            Span::styled(" ", self.get_style(AppTab::Peers)),
-            Span::styled("P", self.get_style(AppTab::Peers).underlined()),
-            Span::styled("eers ", self.get_style(AppTab::Peers)),
-            Span::styled(" ", self.get_style(AppTab::Log)),
-            Span::styled("L", self.get_style(AppTab::Log).underlined()),
-            Span::styled("og ", self.get_style(AppTab::Log)),
+            Span::styled(" ", self.get_tabstyle(AppTab::Downloads)),
+            Span::styled("D", self.get_tabstyle(AppTab::Downloads).underlined()),
+            Span::styled("ownloads ", self.get_tabstyle(AppTab::Downloads)),
+            Span::styled(" ", self.get_tabstyle(AppTab::Peers)),
+            Span::styled("P", self.get_tabstyle(AppTab::Peers).underlined()),
+            Span::styled("eers ", self.get_tabstyle(AppTab::Peers)),
+            Span::styled(" ", self.get_tabstyle(AppTab::Log)),
+            Span::styled("L", self.get_tabstyle(AppTab::Log).underlined()),
+            Span::styled("og ", self.get_tabstyle(AppTab::Log)),
         ])
         .right_aligned()
         .render(tab_list_area, buf);
@@ -217,7 +217,7 @@ impl Widget for &App {
     }
 }
 impl App {
-    fn get_style(&self, tab: AppTab) -> Style {
+    fn get_tabstyle(&self, tab: AppTab) -> Style {
         let selected = Style::new().fg(Color::Black).bg(Color::LightBlue);
         let default_style = Style::new();
         if self.selected_tab == tab {
