@@ -201,7 +201,7 @@ impl Widget for &App {
             Span::styled("ownloads ", self.get_style(AppTab::Downloads)),
             Span::styled(" ", self.get_style(AppTab::Peers)),
             Span::styled("P", self.get_style(AppTab::Peers).underlined()),
-            Span::styled("eers", self.get_style(AppTab::Peers)),
+            Span::styled("eers ", self.get_style(AppTab::Peers)),
             Span::styled(" ", self.get_style(AppTab::Log)),
             Span::styled("L", self.get_style(AppTab::Log).underlined()),
             Span::styled("og ", self.get_style(AppTab::Log)),
