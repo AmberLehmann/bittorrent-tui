@@ -2,7 +2,7 @@ use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
 use log::{error, info, trace};
 use regex::Regex;
 use std::{
-    fmt::Display,
+    fmt::{write, Display},
     fs::File,
     io::{Read, Stdout},
     net::{SocketAddr, ToSocketAddrs},
@@ -16,6 +16,19 @@ pub enum OpenTorrentError {
     MultiFile,
     FailedToOpen(std::io::Error),
     FailedToDecode(serde_bencode::Error),
+}
+
+impl Display for OpenTorrentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BadTrackerURL => write!(f, "Torrent provides malformed tracker URL."),
+            Self::UnableToResolve => write!(f, "Unable to resolve hostname from ip address."),
+            Self::UDPTracker => write!(f, "UDP trackers are not currently supported."),
+            Self::MultiFile => write!(f, "Multi-file mode is currently not supported."),
+            Self::FailedToOpen(e) => write!(f, "Failed to open Torrent: {e}"),
+            Self::FailedToDecode(e) => write!(f, "Failed to decode Torrent: {e}"),
+        }
+    }
 }
 
 pub enum TorrentStatus {

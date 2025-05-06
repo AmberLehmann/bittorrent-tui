@@ -1,7 +1,7 @@
 use crate::{
     logger::LogTab,
     metainfo::{Info, MetaInfo, SingleFileInfo},
-    torrent::{Torrent, TorrentStatus},
+    torrent::{OpenTorrentError, Torrent, TorrentStatus},
 };
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
@@ -18,7 +18,6 @@ use ratatui::{
 };
 use regex::Regex;
 use std::{
-    fs::File,
     io::{Read, Stdout},
     net::{SocketAddr, ToSocketAddrs},
 };
@@ -110,7 +109,7 @@ impl App {
         let new_torrent = match Torrent::open(path) {
             Ok(f) => f,
             Err(e) => {
-                error!("{:?}", e);
+                error!("{e}");
                 return;
             }
         };

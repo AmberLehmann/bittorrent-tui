@@ -148,11 +148,11 @@ where
         {
             trace!("Deserializing peers in compact format.");
             if b.len() % 6 != 0 {
-                error!("Compact peers must be a multiple of 6.");
-                return Err(TrackerError::FailedToDecode(serde_bencode::Error::custom(
-                    "Compact peers must be a multiple of 6.",
-                )))
-                .map_err(E::custom);
+                return Err(E::custom(TrackerError::FailedToDecode(
+                    serde_bencode::Error::InvalidLength(
+                        "Compact peers must be a multiple of 6.".into(),
+                    ),
+                )));
             }
             let mut peers = Vec::new();
             for chunk in b.chunks_exact(6) {
