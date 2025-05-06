@@ -129,7 +129,7 @@ impl App {
             }
         };
 
-        info!("tracker addr {}", new_meta.announce);
+        info!("Tracker address: {}", new_meta.announce);
         let Some(caps) = self.hostname_regex.captures(&new_meta.announce) else {
             error!("Unable to parse tracker URL");
             return;
