@@ -195,82 +195,16 @@ impl Widget for &App {
         let inner_area = block.inner(area);
         block.render(area, buf);
 
-        let selected = Style::new().fg(Color::Black).bg(Color::LightBlue);
-        let default_style = Style::new();
-
         Line::from_iter([
-            Span::styled(
-                " ",
-                if self.selected_tab == AppTab::Downloads {
-                    selected
-                } else {
-                    default_style
-                },
-            ),
-            Span::styled(
-                "D",
-                if self.selected_tab == AppTab::Downloads {
-                    selected.underlined()
-                } else {
-                    default_style.underlined()
-                },
-            ),
-            Span::styled(
-                "ownloads ",
-                if self.selected_tab == AppTab::Downloads {
-                    selected
-                } else {
-                    default_style
-                },
-            ),
-            Span::styled(
-                " ",
-                if self.selected_tab == AppTab::Peers {
-                    selected
-                } else {
-                    default_style
-                },
-            ),
-            Span::styled(
-                "P",
-                if self.selected_tab == AppTab::Peers {
-                    selected.underlined()
-                } else {
-                    default_style.underlined()
-                },
-            ),
-            Span::styled(
-                "eers ",
-                if self.selected_tab == AppTab::Peers {
-                    selected
-                } else {
-                    default_style
-                },
-            ),
-            Span::styled(
-                " ",
-                if self.selected_tab == AppTab::Log {
-                    selected
-                } else {
-                    default_style
-                },
-            ),
-            Span::styled(
-                "L",
-                if self.selected_tab == AppTab::Log {
-                    selected.underlined()
-                } else {
-                    default_style.underlined()
-                },
-            ),
-            Span::styled(
-                "og ",
-                if self.selected_tab == AppTab::Log {
-                    selected
-                } else {
-                    default_style
-                },
-            ),
+            Span::styled(" ", self.get_style(AppTab::Downloads)),
+            Span::styled("D", self.get_style(AppTab::Downloads).underlined()),
+            Span::styled("ownloads ", self.get_style(AppTab::Downloads)),
+            Span::styled(" ", self.get_style(AppTab::Peers)),
+            Span::styled("P", self.get_style(AppTab::Peers).underlined()),
+            Span::styled("eers", self.get_style(AppTab::Peers)),
+            Span::styled(" ", self.get_style(AppTab::Log)),
+            Span::styled("L", self.get_style(AppTab::Log).underlined()),
+            Span::styled("og ", self.get_style(AppTab::Log)),
         ])
         .right_aligned()
         .render(tab_list_area, buf);
@@ -279,6 +213,17 @@ impl Widget for &App {
             AppTab::Downloads => self.render_downloads(inner_area, buf),
             AppTab::Peers => self.render_peers(inner_area, buf),
             AppTab::Log => self.log_tab.render(inner_area, buf),
+        }
+    }
+}
+impl App {
+    fn get_style(&self, tab: AppTab) -> Style {
+        let selected = Style::new().fg(Color::Black).bg(Color::LightBlue);
+        let default_style = Style::new();
+        if self.selected_tab == tab {
+            selected
+        } else {
+            default_style
         }
     }
 }
