@@ -1,7 +1,7 @@
 use bytes::{BufMut, BytesMut};
 use log::{error, trace};
 use serde::{
-    de::{self},
+    de::{self, Error},
     Deserialize,
 };
 use serde_bytes::ByteBuf;
@@ -9,6 +9,25 @@ use std::{
     fmt::{Display, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
+
+#[derive(Debug)]
+pub enum TrackerError {
+    FailedToDecode(serde_bencode::Error),
+}
+
+impl From<serde_bencode::Error> for TrackerError {
+    fn from(e: serde_bencode::Error) -> Self {
+        Self::FailedToDecode(e)
+    }
+}
+
+impl Display for TrackerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::FailedToDecode(e) => e.fmt(f),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum TrackerRequestEvent {
@@ -128,6 +147,13 @@ where
             E: de::Error,
         {
             trace!("Deserializing peers in compact format.");
+            if b.len() % 6 != 0 {
+                error!("Compact peers must be a multiple of 6.");
+                return Err(TrackerError::FailedToDecode(serde_bencode::Error::custom(
+                    "Compact peers must be a multiple of 6.",
+                )))
+                .map_err(E::custom);
+            }
             let mut peers = Vec::new();
             for chunk in b.chunks_exact(6) {
                 let ip_addr = Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]);
