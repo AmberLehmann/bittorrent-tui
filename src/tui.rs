@@ -153,7 +153,7 @@ impl App {
                 Info::Multi(_) => {}
                 Info::Single(f) => {
                     Span::raw(&f.name).render(name, buf);
-                    Span::raw(format!("{}", f.length)).render(size, buf);
+                    Span::raw(convert_to_human(f.length)).render(size, buf);
                 }
             }
 
@@ -224,4 +224,15 @@ impl App {
             default_style
         }
     }
+}
+
+const UNITS: [&'static str; 7] = ["B", "KiB", "MiB", "GiB", "Tib", "PiB", "EiB"];
+
+fn convert_to_human(bytes: u64) -> String {
+    for i in 1..=6 {
+        if bytes >> (i * 10) == 0 {
+            return format!("{} {}", bytes >> ((i - 1) * 10), UNITS[i - 1]);
+        }
+    }
+    return format!("{} {}", bytes >> (6 * 10), UNITS[6]);
 }
