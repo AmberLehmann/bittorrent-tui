@@ -200,7 +200,7 @@ impl Widget for &App {
 
         Line::from_iter([
             Span::styled(
-                " Downloads ",
+                " ",
                 if self.selected_tab == AppTab::Downloads {
                     selected
                 } else {
@@ -208,7 +208,23 @@ impl Widget for &App {
                 },
             ),
             Span::styled(
-                " Peers ",
+                "D",
+                if self.selected_tab == AppTab::Downloads {
+                    selected.underlined()
+                } else {
+                    default_style.underlined()
+                },
+            ),
+            Span::styled(
+                "ownloads ",
+                if self.selected_tab == AppTab::Downloads {
+                    selected
+                } else {
+                    default_style
+                },
+            ),
+            Span::styled(
+                " ",
                 if self.selected_tab == AppTab::Peers {
                     selected
                 } else {
@@ -216,7 +232,39 @@ impl Widget for &App {
                 },
             ),
             Span::styled(
-                " Log ",
+                "P",
+                if self.selected_tab == AppTab::Peers {
+                    selected.underlined()
+                } else {
+                    default_style.underlined()
+                },
+            ),
+            Span::styled(
+                "eers ",
+                if self.selected_tab == AppTab::Peers {
+                    selected
+                } else {
+                    default_style
+                },
+            ),
+            Span::styled(
+                " ",
+                if self.selected_tab == AppTab::Log {
+                    selected
+                } else {
+                    default_style
+                },
+            ),
+            Span::styled(
+                "L",
+                if self.selected_tab == AppTab::Log {
+                    selected.underlined()
+                } else {
+                    default_style.underlined()
+                },
+            ),
+            Span::styled(
+                "og ",
                 if self.selected_tab == AppTab::Log {
                     selected
                 } else {
