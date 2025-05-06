@@ -34,7 +34,6 @@ enum AppTab {
 
 pub struct App {
     exit: bool,
-    hostname_regex: Regex,
     log_tab: LogTab,
     rx: std::sync::mpsc::Receiver<(log::Level, String)>,
     selected_tab: AppTab,
@@ -45,7 +44,6 @@ impl App {
     pub fn new(rx: std::sync::mpsc::Receiver<(log::Level, String)>) -> Self {
         Self {
             exit: false,
-            hostname_regex: Regex::new(r"(?P<proto>https?|udp)://(?P<name>[^/]+)").unwrap(),
             log_tab: LogTab::new(),
             rx,
             selected_tab: AppTab::Downloads,
@@ -109,66 +107,13 @@ impl App {
     }
 
     fn open_torrent(&mut self, path: &str) {
-        let mut file = match File::open(path) {
+        let new_torrent = match Torrent::open(path) {
             Ok(f) => f,
             Err(e) => {
-                error!("Failed to open torrent file {:?}", e);
+                error!("{:?}", e);
                 return;
             }
         };
-
-        let mut data = Vec::new();
-        let bytes_read = file.read_to_end(&mut data);
-        info!("open_torrent() read {:?} bytes", bytes_read);
-
-        let new_meta: MetaInfo = match serde_bencode::from_bytes(&data) {
-            Ok(t) => t,
-            Err(e) => {
-                error!("{}", e);
-                return;
-            }
-        };
-
-        info!("Tracker address: {}", new_meta.announce);
-        let Some(caps) = self.hostname_regex.captures(&new_meta.announce) else {
-            error!("Unable to parse tracker URL");
-            return;
-        };
-        let proto = caps.name("proto").unwrap();
-        if proto.as_str() == "udp" {
-            error!("UDP trackers are not supported");
-            return;
-        }
-
-        let hostname = caps.name("name").unwrap();
-        let ip = match format!("{}:80", hostname.as_str()).to_socket_addrs() {
-            Ok(mut ip_iter) => {
-                let ip_opt = ip_iter.next();
-                if let Some(ip) = ip_opt {
-                    ip
-                } else {
-                    error!("Unable to resolve Tracker URL");
-                    return;
-                }
-            }
-            Err(e) => {
-                error!("{}", e);
-                return;
-            }
-        };
-
-        let new_torrent = match new_meta.info {
-            Info::Single(_) => Torrent {
-                status: TorrentStatus::Waiting,
-                meta_info: new_meta,
-                tracker_addr: ip,
-            },
-            Info::Multi(_) => {
-                error!("Multifile mode currently not supported");
-                return;
-            }
-        };
-
         // send out initial request to
 
         self.torrents.push(new_torrent);
