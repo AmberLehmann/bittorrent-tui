@@ -1,7 +1,12 @@
 use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
-use crate::tracker::TrackerRequest;
+use crate::tracker::{TrackerRequest, TrackerRequestEvent};
+use crate::{HashedId20, PeerId20};
 use gethostname::gethostname;
-use log::{error, info, trace};
+use rand::{rng, Rng};
+
+use local_ip_address::local_ip;
+
+use log::{debug, error, info, trace};
 use regex::Regex;
 use std::{
     fmt::{write, Display},
@@ -99,22 +104,32 @@ impl Torrent {
 }
 
 pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<TorrentStatus>) {
+    let Ok(local_ip_v4) = local_ip() else {
+        error!("Unable to get local IPv4");
+        return;
+    };
+    // TODO: Get 20 byte Sha1 hash from info key in metainfo
+    let info_hash: HashedId20 = rng().random();
+    let peer_id: PeerId20 = rng().random();
+    debug!("{:?}", peer_id);
+
     // TODO: Construct TrackerRequest
-    // let request = TrackerRequest {
-    //     info_hash: ,
-    //     peer_id ,
-    //     event: Some(TrackerRequestEvent::Started),
-    //     port: 6881, // Temp hardcoded
-    //     uploaded: 0,
-    //     downloaded: 0,
-    //     left: 0,
-    //     compact: true,
-    //     no_peer_id: false, // Ignored for compact
-    //     ip: ,
-    //
-    //
-    // }
-    // let http_message = request.encode_http_get()
+    let request = TrackerRequest {
+        info_hash,
+        peer_id,
+        event: Some(TrackerRequestEvent::Started),
+        port: 6881, // Temp hardcoded
+        uploaded: 0,
+        downloaded: 0,
+        left: 0,
+        compact: true,
+        no_peer_id: false,     // Ignored for compact
+        ip: Some(local_ip_v4), // Temp default to ipv4, give user ability for ipv6
+        numwant: None,         // temp default, give user ability to choose
+        key: Some("rustyclient".into()),
+        trackerid: None, // If a previous announce contained a tracker id, it should be set here.
+    };
+    let http_message = request.encode_http_get();
 
     error!("torrent thread not implemented");
 

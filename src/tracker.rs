@@ -72,7 +72,7 @@ pub struct TrackerRequest {
 }
 
 impl TrackerRequest {
-    fn encode_http_get(&self) -> BytesMut {
+    pub fn encode_http_get(&self) -> BytesMut {
         use urlencoding::encode_binary;
         let mut buf = BytesMut::with_capacity(512);
         write!(

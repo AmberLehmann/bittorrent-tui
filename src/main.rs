@@ -1,3 +1,5 @@
+use std::fmt::{write, Display};
+
 use crate::{logger::Logger, tui::App};
 use color_eyre::Result;
 //use log::{error, info, trace};
@@ -13,6 +15,7 @@ mod tracker;
 mod tui;
 
 pub type PeerId20 = [u8; 20];
+
 pub type HashedId20 = [u8; 20];
 
 fn main() -> Result<()> {
