@@ -173,7 +173,7 @@ for both "single" and "multiple" modes:
     iii. For the purposes of piece boundaries in the multi-file case, consider the file data as one long continuous stream, composed of the concatenation of each file, so pieces may overlap file boundaries.
 2. pieces: string consisting of the concatenation of all 20-byte SHA1 hash values, one per piece (byte string, i.e. not urlencoded)
     i. Each piece has a corresponding SHA1 hash of the data contained within that piece. These hashes are concatenated to form the pieces value. Note that this is not a list but rather a single string. The length of the string must be a multiple of 20.
-3. private: (optional) this field is an integer. If it is set to "1", the client MUST publish its presence to get other peers ONLY via the trackers explicitly described in the metainfo file. If this field is set to "0" or is not present, the client may obtain peer from other means, e.g. PEX peer exchange, dht. Here, "private" may be read as "no external peer source". NOTE: There is much debate surrounding private trackers.
+3. private: (optional - NOTE: don't really worry about it) this field is an integer. If it is set to "1", the client MUST publish its presence to get other peers ONLY via the trackers explicitly described in the metainfo file. If this field is set to "0" or is not present, the client may obtain peer from other means, e.g. PEX peer exchange, dht. Here, "private" may be read as "no external peer source". NOTE: There is much debate surrounding private trackers.
         
 for "single" mode only:
 1. name: the filename. This is purely advisory. (string)
