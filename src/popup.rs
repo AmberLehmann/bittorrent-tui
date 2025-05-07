@@ -1,12 +1,9 @@
 use crate::theme::THEME;
 use crossterm::event::KeyCode;
 use ratatui::{
-    layout::{Flex, Offset},
+    layout::Flex,
     prelude::*,
-    widgets::{
-        block::{Position, Title},
-        Block, BorderType, Clear, Paragraph, Wrap,
-    },
+    widgets::{Block, BorderType, Clear, Paragraph, Wrap},
 };
 
 #[derive(Default)]

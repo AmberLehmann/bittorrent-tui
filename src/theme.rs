@@ -1,4 +1,4 @@
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Style};
 
 pub struct Theme {
     pub root: Style,

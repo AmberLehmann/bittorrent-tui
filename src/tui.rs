@@ -18,10 +18,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Widget},
     Frame,
 };
-use regex::Regex;
 use std::{
     io::{Read, Stdout},
-    net::{SocketAddr, ToSocketAddrs},
     thread,
 };
 
