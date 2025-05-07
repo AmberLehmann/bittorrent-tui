@@ -115,5 +115,8 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
     //
     // }
     // let http_message = request.encode_http_get()
-    unimplemented!();
+
+    error!("torrent thread not implemented");
+
+    //unimplemented!();
 }
