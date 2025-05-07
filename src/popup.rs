@@ -168,11 +168,9 @@ impl Widget for &TextEntryPopup {
             .style(THEME.popup)
             .border_style(THEME.popup)
             .border_type(BorderType::Rounded)
-            .title(self.title.as_str())
-            .title(
-                Title::from(format!(" [Esc] to Cancel [Enter] to Confirm "))
-                    .alignment(Alignment::Right)
-                    .position(Position::Bottom),
+            .title_top(self.title.as_str())
+            .title_bottom(
+                Line::raw(format!(" [Esc] to Cancel [Enter] to Confirm ")).right_aligned(),
             );
 
         let win_area = window.inner(area);
@@ -181,17 +179,12 @@ impl Widget for &TextEntryPopup {
 
         Paragraph::new(self.text_field.get_str())
             .wrap(Wrap { trim: true })
-            .style(THEME.popup_selected)
+            .style(THEME.popup_focused)
             .render(win_area, buf);
 
-        let cursor_pos = self.text_field.get_cursor_pos() as i32;
-        Span::from("█").style(THEME.popup_selected).render(
-            win_area.offset(Offset {
-                x: cursor_pos % 58,
-                y: cursor_pos / 58,
-            }),
-            buf,
-        );
+        let cursor_pos = self.text_field.get_cursor_pos() as u16;
+        buf[(win_area.x + cursor_pos % 58, win_area.y + cursor_pos / 58)]
+            .set_style(THEME.popup_cursor);
     }
 }
 

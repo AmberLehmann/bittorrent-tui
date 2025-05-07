@@ -53,7 +53,7 @@ impl App {
                 "".to_owned(),
                 "Are you sure you want to quit?".to_owned(),
             ),
-            open_window: TextEntryPopup::new("Enter Path to File".to_owned(), 1),
+            open_window: TextEntryPopup::new(" Enter Path to File ".to_owned(), 1),
             rx,
             selected_tab: AppTab::Downloads,
             torrents: Vec::new(),
