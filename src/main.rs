@@ -13,6 +13,7 @@ mod theme;
 mod torrent;
 mod tracker;
 mod tui;
+mod hashing;
 
 pub type PeerId20 = [u8; 20];
 
