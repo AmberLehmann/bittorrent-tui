@@ -15,7 +15,7 @@ impl Logger {
         Self { client: sender }
     }
     pub fn init(self) -> Result<(), SetLoggerError> {
-        log::set_max_level(LevelFilter::Debug);
+        log::set_max_level(LevelFilter::Trace);
         log::set_boxed_logger(Box::new(self))
     }
 }
@@ -26,6 +26,10 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record<'_>) {
+        if !record.target().starts_with("btclient") {
+            return;
+        }
+
         self.client
             .send((
                 record.level(),
