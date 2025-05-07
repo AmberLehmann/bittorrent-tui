@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct SingleFileInfo {
     #[serde(rename = "piece length")]
     pub piece_length: u32,
@@ -13,14 +13,14 @@ pub struct SingleFileInfo {
     pub md5sum: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct File {
     pub length: u64,
     pub md5sum: Option<String>,
     pub path: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MultiFileInfo {
     #[serde(rename = "piece length")]
     pub piece_length: u32,
@@ -31,7 +31,7 @@ pub struct MultiFileInfo {
     pub files: Vec<File>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum Info {
     #[serde(untagged)]
     Single(SingleFileInfo),
@@ -40,7 +40,7 @@ pub enum Info {
     Multi(MultiFileInfo),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MetaInfo {
     pub info: Info,
     pub announce: String,

@@ -1,4 +1,6 @@
 use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
+use crate::tracker::TrackerRequest;
+use gethostname::gethostname;
 use log::{error, info, trace};
 use regex::Regex;
 use std::{
@@ -6,6 +8,7 @@ use std::{
     fs::File,
     io::{Read, Stdout},
     net::{SocketAddr, ToSocketAddrs},
+    sync::mpsc::{Receiver, Sender},
 };
 
 #[derive(Debug)]
@@ -31,31 +34,22 @@ impl Display for OpenTorrentError {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum TorrentStatus {
-    Waiting,     // signifies that this torrent is awaiting a response from the tracker
-    Connected,   // connection has been established with the tracker
-    Downloading, // connected and downloading/seeding
-    Seeding,     // connected, Ddwnload completed, and seeding
-    Paused,      // conected?
+    Waiting,   // signifies that this torrent is awaiting a response from the tracker
+    Connected, // connection has been established with the tracker
 }
 
-impl Display for TorrentStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                TorrentStatus::Waiting => "Waiting",
-                TorrentStatus::Connected => "Connected",
-                TorrentStatus::Downloading => "Downloading",
-                TorrentStatus::Seeding => "Seeding",
-                TorrentStatus::Paused => "Paused",
-            }
-        )
-    }
+pub struct TorrentInfo {
+    pub size: u64,
+    pub progress: u8,
+    pub status: TorrentStatus,
+    pub seeds: u8,
+    pub peers: u8,
+    pub speed: u64,
 }
 
+#[derive(Clone)]
 pub struct Torrent {
     pub meta_info: MetaInfo,
     pub tracker_addr: SocketAddr,
@@ -102,4 +96,24 @@ impl Torrent {
             Info::Multi(_) => Err(OpenTorrentError::MultiFile),
         }
     }
+}
+
+pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<TorrentStatus>) {
+    // TODO: Construct TrackerRequest
+    // let request = TrackerRequest {
+    //     info_hash: ,
+    //     peer_id ,
+    //     event: Some(TrackerRequestEvent::Started),
+    //     port: 6881, // Temp hardcoded
+    //     uploaded: 0,
+    //     downloaded: 0,
+    //     left: 0,
+    //     compact: true,
+    //     no_peer_id: false, // Ignored for compact
+    //     ip: ,
+    //
+    //
+    // }
+    // let http_message = request.encode_http_get()
+    unimplemented!();
 }

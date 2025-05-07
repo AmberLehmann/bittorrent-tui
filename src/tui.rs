@@ -3,7 +3,7 @@ use crate::{
     metainfo::{Info, MetaInfo, SingleFileInfo},
     popup::{ConfirmationPopup, PopupStatus, TextEntryPopup},
     theme::THEME,
-    torrent::{Torrent, TorrentStatus},
+    torrent::{handle_torrent, Torrent, TorrentStatus},
 };
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
@@ -22,6 +22,7 @@ use regex::Regex;
 use std::{
     io::{Read, Stdout},
     net::{SocketAddr, ToSocketAddrs},
+    thread,
 };
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
@@ -155,7 +156,11 @@ impl App {
             }
         };
         // send out initial request to
-        self.torrents.push(new_torrent);
+        self.torrents.push(new_torrent.clone()); // TODO: Change to torrent status
+        let (tx1, rx1) = std::sync::mpsc::channel();
+        let (tx2, rx2) = std::sync::mpsc::channel();
+
+        let thread_handle = thread::spawn(move || handle_torrent(new_torrent, tx1, rx2));
     }
 
     // RENDERING CODE
@@ -194,7 +199,7 @@ impl App {
                 Info::Multi(_) => {}
                 Info::Single(f) => {
                     Span::raw(&f.name).render(name, buf);
-                    Span::raw(format!("{}", torrent.status)).render(status, buf);
+                    Span::raw(format!("{:?}", torrent.status)).render(status, buf);
                     Span::raw(convert_to_human(f.length)).render(size, buf);
                 }
             }
