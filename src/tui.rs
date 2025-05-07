@@ -1,6 +1,8 @@
 use crate::{
     logger::LogTab,
     metainfo::{Info, MetaInfo, SingleFileInfo},
+    popup::{ConfirmationPopup, PopupStatus, TextEntryPopup},
+    theme::THEME,
     torrent::{Torrent, TorrentStatus},
 };
 use color_eyre::Result;
@@ -34,6 +36,8 @@ enum AppTab {
 pub struct App {
     exit: bool,
     log_tab: LogTab,
+    save_window: ConfirmationPopup,
+    open_window: TextEntryPopup,
     rx: std::sync::mpsc::Receiver<(log::Level, String)>,
     selected_tab: AppTab,
     torrents: Vec<Torrent>,
@@ -44,6 +48,11 @@ impl App {
         Self {
             exit: false,
             log_tab: LogTab::new(),
+            save_window: ConfirmationPopup::new(
+                "".to_owned(),
+                "Are you sure you want to quit?".to_owned(),
+            ),
+            open_window: TextEntryPopup::new("Enter Path to File".to_owned(), 1),
             rx,
             selected_tab: AppTab::Downloads,
             torrents: Vec::new(),
@@ -61,6 +70,28 @@ impl App {
                 self.log_tab.push(s);
             }
 
+            // popup handler
+            match self.save_window.status {
+                PopupStatus::Closed | PopupStatus::InUse => {}
+                PopupStatus::Canceled => {
+                    self.save_window.close();
+                }
+                PopupStatus::Confirmed => {
+                    self.save_window.close();
+                    self.exit = self.save_window.decision();
+                }
+            }
+            match self.open_window.status {
+                PopupStatus::Closed | PopupStatus::InUse => {}
+                PopupStatus::Canceled => {
+                    self.open_window.close();
+                }
+                PopupStatus::Confirmed => {
+                    self.open_window.close();
+                    let path = self.open_window.take();
+                    self.open_torrent(&path);
+                }
+            }
             // TODO: handle bittorrent stuff
 
             // TODO: check socket assosciated with each active torrent for information from tracker
@@ -70,6 +101,10 @@ impl App {
             // TODO: send periodic updates to tracker for each active torrent
         }
         Ok(())
+    }
+
+    fn try_quit(&mut self) {
+        self.save_window.show();
     }
 
     fn render_frame(&self, frame: &mut Frame) {
@@ -92,15 +127,21 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit = true,
-            KeyCode::Char('d') | KeyCode::Char('1') => self.selected_tab = AppTab::Downloads,
-            KeyCode::Char('p') | KeyCode::Char('2') => self.selected_tab = AppTab::Peers,
-            KeyCode::Char('l') | KeyCode::Char('3') => self.selected_tab = AppTab::Log,
-            KeyCode::Char('o') => self.open_torrent("./ubuntu-25.04-desktop-amd64.iso.torrent"),
-            KeyCode::Char('j') => self.log_tab.scroll_down(),
-            KeyCode::Char('k') => self.log_tab.scroll_up(),
-            _ => {}
+        if self.save_window.status == PopupStatus::InUse {
+            self.save_window.handle_input(key_event.code);
+        } else if self.open_window.status == PopupStatus::InUse {
+            self.open_window.handle_input(key_event.code);
+        } else {
+            match key_event.code {
+                KeyCode::Char('q') => self.try_quit(),
+                KeyCode::Char('d') | KeyCode::Char('1') => self.selected_tab = AppTab::Downloads,
+                KeyCode::Char('p') | KeyCode::Char('2') => self.selected_tab = AppTab::Peers,
+                KeyCode::Char('l') | KeyCode::Char('3') => self.selected_tab = AppTab::Log,
+                KeyCode::Char('o') => self.open_window.show(),
+                KeyCode::Char('j') => self.log_tab.scroll_down(),
+                KeyCode::Char('k') => self.log_tab.scroll_up(),
+                _ => {}
+            }
         }
         Ok(())
     }
@@ -178,6 +219,14 @@ impl App {
     }
 
     fn render_peers(&self, _area: Rect, _buf: &mut Buffer) {}
+
+    fn get_tabstyle(&self, tab: AppTab) -> Style {
+        if self.selected_tab == tab {
+            THEME.selected
+        } else {
+            THEME.root
+        }
+    }
 }
 
 impl Widget for &App {
@@ -213,16 +262,11 @@ impl Widget for &App {
             AppTab::Peers => self.render_peers(inner_area, buf),
             AppTab::Log => self.log_tab.render(inner_area, buf),
         }
-    }
-}
-impl App {
-    fn get_tabstyle(&self, tab: AppTab) -> Style {
-        let selected = Style::new().fg(Color::Black).bg(Color::LightBlue);
-        let default_style = Style::new();
-        if self.selected_tab == tab {
-            selected
-        } else {
-            default_style
+
+        if self.save_window.status == PopupStatus::InUse {
+            self.save_window.render(area, buf);
+        } else if self.open_window.status == PopupStatus::InUse {
+            self.open_window.render(area, buf);
         }
     }
 }

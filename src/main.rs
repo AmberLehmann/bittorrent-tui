@@ -6,6 +6,8 @@ mod args;
 mod handshake;
 mod logger;
 mod metainfo;
+mod popup;
+mod theme;
 mod torrent;
 mod tracker;
 mod tui;
