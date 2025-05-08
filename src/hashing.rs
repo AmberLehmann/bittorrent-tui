@@ -82,13 +82,10 @@ fn do_hashing(
 }
 
 
-fn hash_buffer(in_buf: &[u8]) -> u64 {
+fn hash_buffer(in_buf: &[u8]) -> [u8; 20] {
     let mut hasher = Sha1::new();
     hasher.update(in_buf);
     let hash = hasher.finalize();
-    let mut buf = [0u8; 8];
-    let len = 8.min(hash.len());
-    buf[..len].copy_from_slice(&hash[..len]);
-    u64::from_be_bytes(buf)
+    hash.into()
 }
 
