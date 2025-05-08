@@ -1,9 +1,11 @@
 use log::{debug, error, info, trace};
 use sha1::{Digest, Sha1};
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
+use tokio::sync::{
+    mpsc,
+    mpsc::{UnboundedReceiver, UnboundedSender},
+};
 
 use crate::HashedId20;
 
@@ -15,13 +17,15 @@ use crate::HashedId20;
 // i am a torrent thread spawning a hashing thread
 // except i don't exist yet so this is a fake function which is pretending to be the torrent thread
 fn fake_spawner_thread() {
-    let (tx_to_hasher, rx_from_main): (
-        Sender<(usize, Arc<Vec<u8>>)>,
-        Receiver<(usize, Arc<Vec<u8>>)>,
-    ) = mpsc::channel(); // for sending over the u8 vecs and their matching index?
+    let (tx_to_hasher, mut rx_from_main): (
+        UnboundedSender<(usize, Arc<Vec<u8>>)>,
+        UnboundedReceiver<(usize, Arc<Vec<u8>>)>,
+    ) = mpsc::unbounded_channel(); // for sending over the u8 vecs and their matching index?
 
-    let (tx_to_main, rx_from_hasher): (Sender<(usize, HashedId20)>, Receiver<(usize, HashedId20)>) =
-        mpsc::channel(); // for sending back the u64 result and their matching index?
+    let (tx_to_main, mut rx_from_hasher): (
+        UnboundedSender<(usize, HashedId20)>,
+        UnboundedReceiver<(usize, HashedId20)>,
+    ) = mpsc::unbounded_channel(); // for sending back the u64 result and their matching index?
 
     // spawn a single thread that will do all out hashing
     thread::spawn(move || do_hashing(rx_from_main, tx_to_main));
@@ -67,14 +71,19 @@ fn fake_spawner_thread() {
     }
 }
 
-fn do_hashing(
-    rx: mpsc::Receiver<(usize, Arc<Vec<u8>>)>, // receive from main
-    tx: mpsc::Sender<(usize, HashedId20)>,     // to main
-                                               // for mio waker, just pass a waker into here https://traffloat.github.io/api/master/mio/struct.Waker.html
-                                               // waker: Arc<mio::Waker>
+async fn do_hashing(
+    mut rx: UnboundedReceiver<(usize, Arc<Vec<u8>>)>, // receive from main
+    tx: UnboundedSender<(usize, HashedId20)>,         // to main
+                                                      // for mio waker, just pass a waker into here https://traffloat.github.io/api/master/mio/struct.Waker.html
+                                                      // waker: Arc<mio::Waker>
 ) {
     // recv not try_recv bc we *do* want to block
-    while let Ok((index, arcpointer)) = rx.recv() {
+
+    loop {
+        let result: Option<(usize, Arc<Vec<u8>>)> = rx.recv().await;
+        let Some((index, arcpointer)) = result else {
+            continue;
+        };
         let hash = hash_buffer(&arcpointer);
         tx.send((index, hash)).unwrap();
         // for mio waker, wake here
