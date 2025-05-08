@@ -114,7 +114,13 @@ impl Torrent {
         }
 
         let hostname = caps.name("name").unwrap();
-        let ip = match format!("{}:80", hostname.as_str()).to_socket_addrs() {
+        let addr = if hostname.as_str().contains(':') {
+            format!("{}", hostname.as_str()).to_socket_addrs()
+        } else {
+            format!("{}:80", hostname.as_str()).to_socket_addrs()
+        };
+
+        let ip = match addr {
             Ok(mut ip_iter) => ip_iter.next().ok_or(OpenTorrentError::UnableToResolve)?,
             Err(_e) => {
                 return Err(OpenTorrentError::BadTrackerURL);
@@ -149,11 +155,12 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         port: 6881, // Temp hardcoded
         uploaded: 0,
         downloaded: 0,
-        left: 0,
+        left: 100,
         compact: true,
-        no_peer_id: false,     // Ignored for compact
-        ip: Some(local_ip_v4), // Temp default to ipv4, give user ability for ipv6
-        numwant: None,         // temp default, give user ability to choose
+        no_peer_id: false, // Ignored for compact
+        //ip: Some(local_ip_v4), // Temp default to ipv4, give user ability for ipv6
+        ip: None,      // Temp default to ipv4, give user ability for ipv6
+        numwant: None, // temp default, give user ability to choose
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
@@ -162,10 +169,11 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         return;
     };
     error!("test");
-    let mut response = [0u8; 20];
+    let mut response_buf = vec![0u8; 3000];
     stream.write_all(&request.encode_http_get()[..]).unwrap();
-    stream.read_exact(&mut response).unwrap();
-    debug!("{:?}", response);
+    info!("sent initial request to tracker");
+    stream.read(&mut response_buf).unwrap();
+    debug!("{:?}", response_buf);
 
     error!("torrent thread not implemented");
 
