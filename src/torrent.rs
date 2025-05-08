@@ -23,7 +23,7 @@ pub enum OpenTorrentError {
     UDPTracker,
     MultiFile,
     FailedToOpen(std::io::Error),
-    FailedToDecode(serde_bencode::Error),
+    FailedToDecode(bendy::serde::error::Error),
     MissingInfoDict,
 }
 
@@ -94,7 +94,7 @@ impl Torrent {
         }
 
         let new_meta: MetaInfo =
-            serde_bencode::from_bytes(&data).map_err(OpenTorrentError::FailedToDecode)?;
+            bendy::serde::from_bytes(&data).map_err(OpenTorrentError::FailedToDecode)?;
 
         info!("Tracker address: {}", new_meta.announce);
         let Some(caps) = hostname_regex.captures(&new_meta.announce) else {

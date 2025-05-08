@@ -110,6 +110,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8133e404c8bec821e531f347dab1247bf64f60882826e7228f8ffeb33a35a658"
 dependencies = [
  "failure",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -143,7 +145,6 @@ dependencies = [
  "ratatui",
  "regex",
  "serde",
- "serde_bencode",
  "serde_bytes",
  "sha1",
  "urlencoding",
@@ -941,16 +942,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
 dependencies = [
  "serde_derive",
-]
-
-[[package]]
-name = "serde_bencode"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a70dfc7b7438b99896e7f8992363ab8e2c4ba26aa5ec675d32d1c3c2c33d413e"
-dependencies = [
- "serde",
- "serde_bytes",
 ]
 
 [[package]]

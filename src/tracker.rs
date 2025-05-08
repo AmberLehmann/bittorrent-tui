@@ -14,11 +14,11 @@ use crate::{HashedId20, PeerId20};
 
 #[derive(Debug)]
 pub enum TrackerError {
-    FailedToDecode(serde_bencode::Error),
+    FailedToDecode(bendy::serde::error::Error),
 }
 
-impl From<serde_bencode::Error> for TrackerError {
-    fn from(e: serde_bencode::Error) -> Self {
+impl From<bendy::serde::error::Error> for TrackerError {
+    fn from(e: bendy::serde::error::Error) -> Self {
         Self::FailedToDecode(e)
     }
 }
@@ -150,7 +150,7 @@ where
             trace!("Deserializing peers in compact format.");
             if b.len() % 6 != 0 {
                 return Err(E::custom(TrackerError::FailedToDecode(
-                    serde_bencode::Error::InvalidLength(
+                    bendy::serde::error::Error::CustomDecode(
                         "Compact peers must be a multiple of 6.".into(),
                     ),
                 )));
