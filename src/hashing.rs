@@ -1,7 +1,6 @@
 use log::{debug, error, info, trace};
 use sha1::{Digest, Sha1};
 use std::sync::Arc;
-use std::thread;
 use tokio::sync::{
     mpsc,
     mpsc::{UnboundedReceiver, UnboundedSender},
@@ -28,7 +27,7 @@ fn fake_spawner_thread() {
     ) = mpsc::unbounded_channel(); // for sending back the u64 result and their matching index?
 
     // spawn a single thread that will do all out hashing
-    thread::spawn(move || do_hashing(rx_from_main, tx_to_main));
+    tokio::spawn(async move { do_hashing(rx_from_main, tx_to_main).await });
 
     let mut sent_bool: bool = false;
     let mut got_tha_piece: bool = false;
@@ -82,7 +81,7 @@ async fn do_hashing(
     loop {
         let result: Option<(usize, Arc<Vec<u8>>)> = rx.recv().await;
         let Some((index, arcpointer)) = result else {
-            continue;
+            break;
         };
         let hash = hash_buffer(&arcpointer);
         tx.send((index, hash)).unwrap();
