@@ -165,8 +165,9 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         error!("Could not connect to tracker");
         return;
     };
-    stream.write_all(&request.encode_http_get()[..]).unwrap();
-    info!("Sent initial request to tracker.");
+    let http_msg = request.encode_http_get();
+    stream.write_all(&http_msg[..]).unwrap();
+    info!("Sent initial request to tracker: {:?}", http_msg);
     let mut buf = [0u8; 3000];
     stream.read(&mut buf).unwrap();
     debug!("{:?}", buf);
