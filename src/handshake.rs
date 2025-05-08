@@ -1,4 +1,4 @@
-pub type HashedId20 = [u8; 20];
+use crate::HashedId20;
 
 pub struct Handshake {
     pstrlen: u8,

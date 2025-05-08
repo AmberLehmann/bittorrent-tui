@@ -1,4 +1,3 @@
-use crate::handshake::HashedId20;
 use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
 use crate::tracker::{TrackerRequest, TrackerRequestEvent};
 use crate::{HashedId20, PeerId20};
@@ -62,6 +61,7 @@ pub struct Torrent {
     pub meta_info: MetaInfo,
     pub tracker_addr: SocketAddr,
     pub status: TorrentStatus,
+    pub info_hash: HashedId20,
     //pieces_downloaded: Vec<bool>,
 }
 
@@ -124,6 +124,7 @@ impl Torrent {
                 status: TorrentStatus::Waiting,
                 meta_info: new_meta,
                 tracker_addr: ip,
+                info_hash,
             }),
             Info::Multi(_) => Err(OpenTorrentError::MultiFile),
         }
@@ -136,13 +137,11 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         return;
     };
     // TODO: Get 20 byte Sha1 hash from info key in metainfo
-    let info_hash: HashedId20 = rng().random();
     let peer_id: PeerId20 = rng().random();
-    debug!("{:?}", peer_id);
 
     // TODO: Construct TrackerRequest
     let request = TrackerRequest {
-        info_hash,
+        info_hash: torrent.info_hash,
         peer_id,
         event: Some(TrackerRequestEvent::Started),
         port: 6881, // Temp hardcoded
