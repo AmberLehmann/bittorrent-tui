@@ -157,8 +157,9 @@ impl App {
         self.torrents.push(new_torrent.clone()); // TODO: Change to torrent status
         let (tx1, rx1) = std::sync::mpsc::channel();
         let (tx2, rx2) = std::sync::mpsc::channel();
-
-        let thread_handle = thread::spawn(move || handle_torrent(new_torrent, tx1, rx2));
+        tokio::spawn(async {
+            handle_torrent(new_torrent, tx1, rx2).await;
+        });
     }
 
     // RENDERING CODE

@@ -6,13 +6,16 @@ use log::{debug, error, info};
 use rand::{rng, Rng};
 use regex::Regex;
 use sha1::{Digest, Sha1};
-use std::net::TcpStream;
 use std::{
     fmt::Display,
     fs::File,
     io::{Read, Write},
     net::{SocketAddr, ToSocketAddrs},
     sync::mpsc::{Receiver, Sender},
+};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
 };
 
 #[derive(Debug)]
@@ -136,7 +139,12 @@ impl Torrent {
     }
 }
 
-pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<TorrentStatus>) {
+pub async fn handle_torrent(
+    torrent: Torrent,
+    tx: Sender<TorrentInfo>,
+    rx: Receiver<TorrentStatus>,
+) {
+    debug!("Hello?");
     let Ok(local_ip_v4) = local_ip() else {
         error!("Unable to get local IPv4");
         return;
@@ -161,16 +169,19 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
-    let Ok(mut stream) = TcpStream::connect(torrent.tracker_addr) else {
+    let Ok(mut stream) = TcpStream::connect(torrent.tracker_addr).await else {
         error!("Could not connect to tracker");
         return;
     };
     let http_msg = request.encode_http_get();
-    stream.write_all(&http_msg[..]).unwrap();
+
+    stream.write_all(&http_msg[..]).await.unwrap();
     info!("Sent initial request to tracker.");
     debug!("{:?}", http_msg);
-    let mut buf = [0u8; 3000];
-    stream.read(&mut buf).unwrap();
+    stream.flush().await.unwrap();
+    debug!("Flushed buffer.");
+    let mut buf = [0u8; 264];
+    stream.read_exact(&mut buf).await.unwrap();
     debug!("{:?}", buf);
 
     error!("torrent thread not implemented");

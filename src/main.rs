@@ -1,5 +1,6 @@
 use crate::{logger::Logger, tui::App};
 use color_eyre::Result;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 //use log::{error, info, trace};
 
 mod args;
@@ -16,7 +17,8 @@ mod tui;
 pub type PeerId20 = [u8; 20];
 pub type HashedId20 = [u8; 20];
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     // let args = Args::parse();
     let mut terminal = ratatui::init();
 

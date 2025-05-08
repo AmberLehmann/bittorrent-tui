@@ -20,4 +20,5 @@ regex = "1.11.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_bytes = "0.11.17"
 sha1 = "0.10.6"
+tokio = { version = "1.45.0", features = ["full"] }
 urlencoding = "2.1.3"
