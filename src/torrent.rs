@@ -1,19 +1,16 @@
 use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
-use crate::tracker::{TrackerRequest, TrackerRequestEvent};
+use crate::tracker::{TrackerRequest, TrackerRequestEvent, TrackerResponse};
 use crate::{HashedId20, PeerId20};
-use clap::error;
-use gethostname::gethostname;
 use local_ip_address::local_ip;
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 use rand::{rng, Rng};
 use regex::Regex;
 use sha1::{Digest, Sha1};
-use std::io::Write;
 use std::net::TcpStream;
 use std::{
-    fmt::{write, Display},
+    fmt::Display,
     fs::File,
-    io::{Read, Stdout},
+    io::{Read, Write},
     net::{SocketAddr, ToSocketAddrs},
     sync::mpsc::{Receiver, Sender},
 };
@@ -115,7 +112,7 @@ impl Torrent {
 
         let hostname = caps.name("name").unwrap();
         let addr = if hostname.as_str().contains(':') {
-            format!("{}", hostname.as_str()).to_socket_addrs()
+            hostname.as_str().to_socket_addrs()
         } else {
             format!("{}:80", hostname.as_str()).to_socket_addrs()
         };
@@ -158,7 +155,7 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         left: 100,
         compact: true,
         no_peer_id: false, // Ignored for compact
-        //ip: Some(local_ip_v4), // Temp default to ipv4, give user ability for ipv6
+        // ip: Some(local_ip_v4), // Temp default to ipv4, give user ability for ipv6
         ip: None,      // Temp default to ipv4, give user ability for ipv6
         numwant: None, // temp default, give user ability to choose
         key: Some("rustyclient".into()),
@@ -168,12 +165,11 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         error!("Could not connect to tracker");
         return;
     };
-    error!("test");
-    let mut response_buf = vec![0u8; 3000];
     stream.write_all(&request.encode_http_get()[..]).unwrap();
-    info!("sent initial request to tracker");
-    stream.read(&mut response_buf).unwrap();
-    debug!("{:?}", response_buf);
+    info!("Sent initial request to tracker.");
+    let mut buf = [0u8; 3000];
+    stream.read(&mut buf).unwrap();
+    debug!("{:?}", buf);
 
     error!("torrent thread not implemented");
 

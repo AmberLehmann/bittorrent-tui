@@ -76,7 +76,7 @@ impl TextEntry {
     }
 
     pub fn remove(&mut self) {
-        if self.text.len() == 0 {
+        if self.text.is_empty() {
             return;
         }
 
@@ -167,9 +167,7 @@ impl Widget for &TextEntryPopup {
             .border_style(THEME.popup)
             .border_type(BorderType::Rounded)
             .title_top(self.title.as_str())
-            .title_bottom(
-                Line::raw(format!(" [Esc] to Cancel [Enter] to Confirm ")).right_aligned(),
-            );
+            .title_bottom(Line::raw(" [Esc] to Cancel [Enter] to Confirm ").right_aligned());
 
         let win_area = window.inner(area);
         Clear.render(win_area, buf);
