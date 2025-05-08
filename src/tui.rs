@@ -318,27 +318,22 @@ impl EventHandler {
                 let delay = interval.tick();
                 let crossterm_event = reader.next().fuse();
                 tokio::select! {
-                  maybe_event = crossterm_event => {
-                    match maybe_event {
-                      Some(Ok(evt)) => {
-                        match evt {
-                          crossterm::event::Event::Key(key) => {
-                            if key.kind == crossterm::event::KeyEventKind::Press {
-                              tx.send(Event::Key(key)).unwrap();
-                            }
-                          },
-                          _ => {},
+                    maybe_event = crossterm_event => {
+                        match maybe_event {
+                            Some(Ok(crossterm::event::Event::Key(key))) => {
+                                if key.kind == crossterm::event::KeyEventKind::Press {
+                                    tx.send(Event::Key(key)).unwrap();
+                                }
+                            },
+                            Some(Err(_)) => {
+                                tx.send(Event::Error).unwrap();
+                            },
+                            Some(Ok(_)) | None => {},
                         }
-                      }
-                      Some(Err(_)) => {
-                        tx.send(Event::Error).unwrap();
-                      }
-                      None => {},
-                    }
-                  },
-                  _ = delay => {
+                    },
+                    _ = delay => {
                       tx.send(Event::Tick).unwrap();
-                  },
+                    },
                 }
             }
         });
