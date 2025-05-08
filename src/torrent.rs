@@ -1,13 +1,15 @@
 use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
 use crate::tracker::{TrackerRequest, TrackerRequestEvent};
 use crate::{HashedId20, PeerId20};
+use clap::error;
 use gethostname::gethostname;
 use local_ip_address::local_ip;
-use rand::{rng, Rng};
-use sha1::{Digest, Sha1};
-
 use log::{debug, error, info, trace};
+use rand::{rng, Rng};
 use regex::Regex;
+use sha1::{Digest, Sha1};
+use std::io::Write;
+use std::net::TcpStream;
 use std::{
     fmt::{write, Display},
     fs::File,
@@ -155,7 +157,15 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
-    let http_message = request.encode_http_get();
+    let Ok(mut stream) = TcpStream::connect(torrent.tracker_addr) else {
+        error!("Could not connect to tracker");
+        return;
+    };
+    error!("test");
+    let mut response = [0u8; 20];
+    stream.write_all(&request.encode_http_get()[..]).unwrap();
+    stream.read_exact(&mut response).unwrap();
+    debug!("{:?}", response);
 
     error!("torrent thread not implemented");
 
