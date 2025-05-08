@@ -1,6 +1,7 @@
 use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
 use crate::tracker::{TrackerRequest, TrackerRequestEvent, TrackerResponse};
 use crate::{HashedId20, PeerId20};
+use bendy::serde;
 use local_ip_address::local_ip;
 use log::{debug, error, info};
 use rand::{rng, Rng};
@@ -180,10 +181,11 @@ pub async fn handle_torrent(
     debug!("{:?}", http_msg);
     stream.flush().await.unwrap();
     debug!("Flushed buffer.");
-    let mut buf = [0u8; 264];
-    stream.read_exact(&mut buf).await.unwrap();
+    let mut buf: Vec<u8> = vec![];
+    stream.read_to_end(&mut buf).await.unwrap();
     debug!("{:?}", buf);
-
+    let response: TrackerResponse = bendy::serde::from_bytes(&buf[..]).unwrap();
+    debug!("{:?}", response);
     error!("torrent thread not implemented");
 
     //unimplemented!();
