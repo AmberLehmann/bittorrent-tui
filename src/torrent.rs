@@ -1,10 +1,11 @@
+use crate::handshake::HashedId20;
 use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
 use crate::tracker::{TrackerRequest, TrackerRequestEvent};
 use crate::{HashedId20, PeerId20};
 use gethostname::gethostname;
-use rand::{rng, Rng};
-
 use local_ip_address::local_ip;
+use rand::{rng, Rng};
+use sha1::{Digest, Sha1};
 
 use log::{debug, error, info, trace};
 use regex::Regex;
@@ -81,6 +82,7 @@ impl Torrent {
             return Err(OpenTorrentError::MissingInfoDict);
         };
 
+        let mut info_hash: HashedId20 = [0u8; 20];
         // search for the info key
         while let Ok(Some(pair)) = metainfo_dict.next_pair() {
             if b"info" == pair.0 {
@@ -90,6 +92,9 @@ impl Torrent {
                 let raw_info_bytes = info_dict
                     .into_raw()
                     .or(Err(OpenTorrentError::MissingInfoDict))?;
+                let mut hasher = Sha1::new();
+                hasher.update(raw_info_bytes);
+                info_hash = hasher.finalize().into();
             }
         }
 
