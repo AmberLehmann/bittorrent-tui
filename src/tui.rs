@@ -285,7 +285,7 @@ fn convert_to_human(bytes: u64) -> String {
             return format!("{} {}", bytes >> ((i - 1) * 10), UNITS[i - 1]);
         }
     }
-    return format!("{} {}", bytes >> (6 * 10), UNITS[6]);
+    format!("{} {}", bytes >> (6 * 10), UNITS[6])
 }
 use futures::{FutureExt, StreamExt};
 use tokio::{sync::mpsc, task::JoinHandle};
