@@ -1,31 +1,35 @@
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Default, Deserialize, Clone)]
 pub struct SingleFileInfo {
     #[serde(rename = "piece length")]
     pub piece_length: u32,
     pub pieces: ByteBuf,
-    pub private: Option<u32>,
+    #[serde(default)]
+    pub private: u32,
 
     pub name: String,
     pub length: u64,
-    pub md5sum: Option<String>,
+    #[serde(default)]
+    pub md5sum: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Default, Deserialize, Clone)]
 pub struct File {
     pub length: u64,
-    pub md5sum: Option<String>,
+    #[serde(default)]
+    pub md5sum: String,
     pub path: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Default, Deserialize, Clone)]
 pub struct MultiFileInfo {
     #[serde(rename = "piece length")]
     pub piece_length: u32,
     pub pieces: ByteBuf,
-    pub private: Option<u32>,
+    #[serde(default)]
+    pub private: u32,
 
     pub name: String,
     pub files: Vec<File>,
@@ -40,13 +44,25 @@ pub enum Info {
     Multi(MultiFileInfo),
 }
 
-#[derive(Debug, Deserialize, Clone)]
+impl Default for Info {
+    fn default() -> Self {
+        Info::Single(SingleFileInfo::default())
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Clone)]
 pub struct MetaInfo {
     pub info: Info,
     pub announce: String,
     #[serde(rename = "announce-list")]
-    pub announce_list: Option<Vec<Vec<String>>>,
-    pub creation_date: Option<usize>,
-    pub comment: Option<String>,
-    pub created_by: Option<String>,
+    #[serde(default)]
+    pub announce_list: Vec<Vec<String>>,
+    #[serde(default)]
+    pub creation_date: usize,
+    #[serde(default)]
+    pub comment: String,
+    #[serde(default)]
+    pub created_by: String,
+    #[serde(default)]
+    pub encoding: String,
 }
