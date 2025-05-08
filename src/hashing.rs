@@ -79,8 +79,7 @@ async fn do_hashing(
     // recv not try_recv bc we *do* want to block
 
     loop {
-        let result: Option<(usize, Arc<Vec<u8>>)> = rx.recv().await;
-        let Some((index, arcpointer)) = result else {
+        let Some((index, arcpointer)): Option<(usize, Arc<Vec<u8>>)> = rx.recv().await else {
             break;
         };
         let hash = hash_buffer(&arcpointer);
