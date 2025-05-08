@@ -276,7 +276,7 @@ impl Widget for &App {
     }
 }
 
-const UNITS: [&'static str; 7] = ["B", "KiB", "MiB", "GiB", "Tib", "PiB", "EiB"];
+const UNITS: [&'static str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
 
 // TODO: add fractional part (probably using floats) and store output to reduce cost
 fn convert_to_human(bytes: u64) -> String {
@@ -285,7 +285,7 @@ fn convert_to_human(bytes: u64) -> String {
             return format!("{} {}", bytes >> ((i - 1) * 10), UNITS[i - 1]);
         }
     }
-    return format!("{} {}", bytes >> (6 * 10), UNITS[6]);
+    format!("{} {}", bytes >> (6 * 10), UNITS[6])
 }
 use futures::{FutureExt, StreamExt};
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -318,27 +318,22 @@ impl EventHandler {
                 let delay = interval.tick();
                 let crossterm_event = reader.next().fuse();
                 tokio::select! {
-                  maybe_event = crossterm_event => {
-                    match maybe_event {
-                      Some(Ok(evt)) => {
-                        match evt {
-                          crossterm::event::Event::Key(key) => {
-                            if key.kind == crossterm::event::KeyEventKind::Press {
-                              tx.send(Event::Key(key)).unwrap();
-                            }
-                          },
-                          _ => {},
+                    maybe_event = crossterm_event => {
+                        match maybe_event {
+                            Some(Ok(crossterm::event::Event::Key(key))) => {
+                                if key.kind == crossterm::event::KeyEventKind::Press {
+                                    tx.send(Event::Key(key)).unwrap();
+                                }
+                            },
+                            Some(Err(_)) => {
+                                tx.send(Event::Error).unwrap();
+                            },
+                            Some(Ok(_)) | None => {},
                         }
-                      }
-                      Some(Err(_)) => {
-                        tx.send(Event::Error).unwrap();
-                      }
-                      None => {},
-                    }
-                  },
-                  _ = delay => {
+                    },
+                    _ = delay => {
                       tx.send(Event::Tick).unwrap();
-                  },
+                    },
                 }
             }
         });
