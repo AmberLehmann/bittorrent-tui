@@ -13,3 +13,5 @@ Adjusting Hasher to be for 20bytes
   - Creating custom error messages
   - Constant Refactoring
   - Started on tracker communication on torrent open
+  - Started on the README.md
+  - Started on handshake struct
