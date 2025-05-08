@@ -24,6 +24,7 @@ pub enum OpenTorrentError {
     MultiFile,
     FailedToOpen(std::io::Error),
     FailedToDecode(serde_bencode::Error),
+    MissingInfoDict,
 }
 
 impl Display for OpenTorrentError {
@@ -33,6 +34,7 @@ impl Display for OpenTorrentError {
             Self::UnableToResolve => write!(f, "Unable to resolve hostname from ip address."),
             Self::UDPTracker => write!(f, "UDP trackers are not currently supported."),
             Self::MultiFile => write!(f, "Multi-file mode is currently not supported."),
+            Self::MissingInfoDict => write!(f, "Unable to locate the info dictionary."),
             Self::FailedToOpen(e) => write!(f, "Failed to open Torrent: {e}"),
             Self::FailedToDecode(e) => write!(f, "Failed to decode Torrent: {e}"),
         }
@@ -70,6 +72,26 @@ impl Torrent {
         let mut data = Vec::new();
         let bytes_read = file.read_to_end(&mut data);
         info!("open_torrent() read {:?} bytes", bytes_read.unwrap_or(0));
+
+        // extract info hash
+        let mut decoder = bendy::decoding::Decoder::new(&data);
+        // get top level dictionary
+        let Ok(Some(bendy::decoding::Object::Dict(mut metainfo_dict))) = decoder.next_object()
+        else {
+            return Err(OpenTorrentError::MissingInfoDict);
+        };
+
+        // search for the info key
+        while let Ok(Some(pair)) = metainfo_dict.next_pair() {
+            if b"info" == pair.0 {
+                let bendy::decoding::Object::Dict(info_dict) = pair.1 else {
+                    return Err(OpenTorrentError::MissingInfoDict);
+                };
+                let raw_info_bytes = info_dict
+                    .into_raw()
+                    .or(Err(OpenTorrentError::MissingInfoDict))?;
+            }
+        }
 
         let new_meta: MetaInfo =
             serde_bencode::from_bytes(&data).map_err(OpenTorrentError::FailedToDecode)?;
