@@ -7,6 +7,7 @@ use serde::{
 use serde_bytes::ByteBuf;
 use std::{
     fmt::{Display, Write},
+    fs::write,
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
@@ -72,7 +73,7 @@ pub struct TrackerRequest {
 }
 
 impl TrackerRequest {
-    pub fn encode_http_get(&self) -> BytesMut {
+    pub fn encode_http_get(&self, announce: String) -> BytesMut {
         use urlencoding::encode_binary;
         let mut buf = BytesMut::with_capacity(512);
         write!(
@@ -109,6 +110,10 @@ impl TrackerRequest {
             write!(buf, "&key={t}").unwrap();
         }
         buf.put_slice(b" HTTP/1.1\r\n");
+
+        write!(buf, "Host: {}\r\n", announce).unwrap();
+
+        buf.put_slice(b"\r\n");
         buf
     }
 }
@@ -216,6 +221,6 @@ mod tests {
             key: Some("secret".into()),
             trackerid: Some("trackster".into()),
         };
-        dbg!(tr.encode_http_get());
+        dbg!(tr.encode_http_get("test".into()));
     }
 }

@@ -151,7 +151,7 @@ pub async fn handle_torrent(
     };
     // TODO: Get 20 byte Sha1 hash from info key in metainfo
     let peer_id: PeerId20 = rng().random();
-
+    debug!("Info hash: {:?}", torrent.info_hash);
     // TODO: Construct TrackerRequest
     let request = TrackerRequest {
         info_hash: torrent.info_hash,
@@ -173,7 +173,7 @@ pub async fn handle_torrent(
         error!("Could not connect to tracker");
         return;
     };
-    let http_msg = request.encode_http_get();
+    let http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
 
     stream.write_all(&http_msg[..]).await.unwrap();
     info!("Sent initial request to tracker.");
