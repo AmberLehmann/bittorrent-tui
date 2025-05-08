@@ -6,7 +6,7 @@ use crate::{
     torrent::{handle_torrent, Torrent, TorrentStatus},
 };
 use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
 use log::{error, info, trace};
 use ratatui::{
     buffer::Buffer,
@@ -34,6 +34,7 @@ enum AppTab {
 
 pub struct App {
     exit: bool,
+    event_handler: EventHandler,
     log_tab: LogTab,
     save_window: ConfirmationPopup,
     open_window: TextEntryPopup,
@@ -46,6 +47,7 @@ impl App {
     pub fn new(rx: std::sync::mpsc::Receiver<(log::Level, String)>) -> Self {
         Self {
             exit: false,
+            event_handler: EventHandler::new(16),
             log_tab: LogTab::new(),
             save_window: ConfirmationPopup::new(
                 "".to_owned(),
@@ -59,10 +61,11 @@ impl App {
     }
 
     /// runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut Tui) -> Result<()> {
+    pub async fn run(&mut self, terminal: &mut Tui) -> Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
-            self.handle_events()?;
+            let event = self.event_handler.next().await?;
+            self.handle_events(event)?;
 
             // handle logging
             if let Ok(s) = self.rx.try_recv() {
@@ -111,16 +114,14 @@ impl App {
     }
 
     /// updates the application's state based on user input
-    fn handle_events(&mut self) -> Result<()> {
-        if event::poll(std::time::Duration::from_millis(16))? {
-            match event::read()? {
-                // it's important to check that the event is a key press event as
-                // crossterm also emits key release and repeat events on Windows.
-                Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                    self.handle_key_event(key_event)?
-                }
-                _ => {}
+    fn handle_events(&mut self, event: Event) -> Result<()> {
+        match event {
+            // it's important to check that the event is a key press event as
+            // crossterm also emits key release and repeat events on Windows.
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event)?
             }
+            _ => {}
         }
         Ok(())
     }
@@ -285,4 +286,74 @@ fn convert_to_human(bytes: u64) -> String {
         }
     }
     return format!("{} {}", bytes >> (6 * 10), UNITS[6]);
+}
+use futures::{FutureExt, StreamExt};
+use tokio::{sync::mpsc, task::JoinHandle};
+
+#[derive(Clone, Copy, Debug)]
+pub enum Event {
+    Error,
+    Tick,
+    Key(KeyEvent),
+}
+
+#[derive(Debug)]
+pub struct EventHandler {
+    _tx: mpsc::UnboundedSender<Event>,
+    rx: mpsc::UnboundedReceiver<Event>,
+    task: Option<JoinHandle<()>>,
+}
+
+impl EventHandler {
+    pub fn new(tick_rate: u64) -> Self {
+        let tick_rate = std::time::Duration::from_millis(tick_rate);
+
+        let (tx, rx) = mpsc::unbounded_channel();
+        let _tx = tx.clone();
+
+        let task = tokio::spawn(async move {
+            let mut reader = crossterm::event::EventStream::new();
+            let mut interval = tokio::time::interval(tick_rate);
+            loop {
+                let delay = interval.tick();
+                let crossterm_event = reader.next().fuse();
+                tokio::select! {
+                  maybe_event = crossterm_event => {
+                    match maybe_event {
+                      Some(Ok(evt)) => {
+                        match evt {
+                          crossterm::event::Event::Key(key) => {
+                            if key.kind == crossterm::event::KeyEventKind::Press {
+                              tx.send(Event::Key(key)).unwrap();
+                            }
+                          },
+                          _ => {},
+                        }
+                      }
+                      Some(Err(_)) => {
+                        tx.send(Event::Error).unwrap();
+                      }
+                      None => {},
+                    }
+                  },
+                  _ = delay => {
+                      tx.send(Event::Tick).unwrap();
+                  },
+                }
+            }
+        });
+
+        Self {
+            _tx,
+            rx,
+            task: Some(task),
+        }
+    }
+
+    pub async fn next(&mut self) -> Result<Event> {
+        self.rx
+            .recv()
+            .await
+            .ok_or(color_eyre::eyre::eyre!("Unable to get event"))
+    }
 }

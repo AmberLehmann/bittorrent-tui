@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
     Logger::new(tx).init().unwrap();
     let mut app = App::new(rx);
-    let result = app.run(&mut terminal);
+    let result = app.run(&mut terminal).await;
 
     ratatui::restore();
     result
