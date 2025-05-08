@@ -154,9 +154,9 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
         downloaded: 0,
         left: 100,
         compact: true,
-        no_peer_id: false, // Ignored for compact
-        // ip: Some(local_ip_v4), // Temp default to ipv4, give user ability for ipv6
-        ip: None,      // Temp default to ipv4, give user ability for ipv6
+        no_peer_id: false,     // Ignored for compact
+        ip: Some(local_ip_v4), // Temp default to ipv4, give user ability for ipv6
+        // ip: None,      // Temp default to ipv4, give user ability for ipv6
         numwant: None, // temp default, give user ability to choose
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
@@ -167,7 +167,8 @@ pub fn handle_torrent(torrent: Torrent, tx: Sender<TorrentInfo>, rx: Receiver<To
     };
     let http_msg = request.encode_http_get();
     stream.write_all(&http_msg[..]).unwrap();
-    info!("Sent initial request to tracker: {:?}", http_msg);
+    info!("Sent initial request to tracker.");
+    debug!("{:?}", http_msg);
     let mut buf = [0u8; 3000];
     stream.read(&mut buf).unwrap();
     debug!("{:?}", buf);
