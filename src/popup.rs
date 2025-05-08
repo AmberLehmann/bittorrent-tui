@@ -21,6 +21,7 @@ impl TextEntry {
     }
 
     pub fn take(&mut self) -> String {
+        self.move_cursor_home();
         std::mem::take(&mut self.text)
     }
 
