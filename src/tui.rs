@@ -144,7 +144,7 @@ impl App {
             self.open_window.handle_input(key_event.code);
         } else {
             match key_event.code {
-                KeyCode::Char('q') => self.try_quit(),
+                KeyCode::Char('q') | KeyCode::Esc => self.try_quit(),
                 KeyCode::Char('d') | KeyCode::Char('1') => self.selected_tab = AppTab::Downloads,
                 KeyCode::Char('p') | KeyCode::Char('2') => self.selected_tab = AppTab::Peers,
                 KeyCode::Char('l') | KeyCode::Char('3') => self.selected_tab = AppTab::Log,
