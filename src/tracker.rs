@@ -28,6 +28,12 @@ impl From<bendy::serde::error::Error> for TrackerError {
     }
 }
 
+impl From<tokio::io::Error> for TrackerError {
+    fn from(e: tokio::io::Error) -> Self {
+        Self::Async(e)
+    }
+}
+
 impl Display for TrackerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {

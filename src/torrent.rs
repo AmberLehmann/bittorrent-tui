@@ -46,6 +46,18 @@ impl Display for OpenTorrentError {
 
 impl std::error::Error for OpenTorrentError {}
 
+impl From<std::io::Error> for OpenTorrentError {
+    fn from(value: std::io::Error) -> Self {
+        OpenTorrentError::FailedToOpen(value)
+    }
+}
+
+impl From<bendy::serde::error::Error> for OpenTorrentError {
+    fn from(value: bendy::serde::error::Error) -> Self {
+        OpenTorrentError::FailedToDecode(value)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TorrentStatus {
     Waiting,     // signifies that this torrent is awaiting a response from the tracker
@@ -94,7 +106,7 @@ pub struct Torrent {
 impl Torrent {
     pub fn open(torrent: OpenTorrentResult) -> Result<Torrent, OpenTorrentError> {
         let hostname_regex = Regex::new(r"(?P<proto>https?|udp)://(?P<name>[^/]+)").unwrap();
-        let mut file = File::open(&torrent.path).map_err(OpenTorrentError::FailedToOpen)?;
+        let mut file = File::open(&torrent.path)?;
 
         let mut data = Vec::new();
         let bytes_read = file.read_to_end(&mut data);
@@ -113,7 +125,7 @@ impl Torrent {
         while let Ok(Some(pair)) = metainfo_dict.next_pair() {
             if b"info" == pair.0 {
                 let bendy::decoding::Object::Dict(info_dict) = pair.1 else {
-                    return Err(OpenTorrentError::MissingInfoDict);
+                    Err(OpenTorrentError::MissingInfoDict)?
                 };
                 let raw_info_bytes = info_dict
                     .into_raw()
@@ -124,13 +136,12 @@ impl Torrent {
             }
         }
 
-        let new_meta: MetaInfo =
-            bendy::serde::from_bytes(&data).map_err(OpenTorrentError::FailedToDecode)?;
+        let new_meta: MetaInfo = bendy::serde::from_bytes(&data)?;
 
         info!("Tracker address: {}", new_meta.announce);
-        let Some(caps) = hostname_regex.captures(&new_meta.announce) else {
-            return Err(OpenTorrentError::BadTrackerURL);
-        };
+        let caps = hostname_regex
+            .captures(&new_meta.announce)
+            .ok_or(OpenTorrentError::BadTrackerURL)?;
 
         let proto = caps.name("proto").unwrap();
         if proto.as_str() == "udp" {
@@ -143,13 +154,7 @@ impl Torrent {
         } else {
             format!("{}:80", hostname.as_str()).to_socket_addrs()
         };
-
-        let ip = match addr {
-            Ok(mut ip_iter) => ip_iter.next().ok_or(OpenTorrentError::UnableToResolve)?,
-            Err(_e) => {
-                return Err(OpenTorrentError::BadTrackerURL);
-            }
-        };
+        let ip = addr?.next().ok_or(OpenTorrentError::UnableToResolve)?;
 
         match new_meta.info {
             Info::Single(_) => Ok(Torrent {
@@ -206,21 +211,13 @@ pub async fn handle_torrent(
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
-    let mut stream = TcpStream::connect(torrent.tracker_addr)
-        .await
-        .map_err(TrackerError::Async)?;
+    let mut stream = TcpStream::connect(torrent.tracker_addr).await?;
     let http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
 
-    stream
-        .write_all(&http_msg[..])
-        .await
-        .map_err(TrackerError::Async)?;
+    stream.write_all(&http_msg[..]).await?;
     info!("Sent initial request to tracker.");
     let mut buf: Vec<u8> = vec![];
-    stream
-        .read_to_end(&mut buf)
-        .await
-        .map_err(TrackerError::Async)?;
+    stream.read_to_end(&mut buf).await?;
     let header_end = match buf.windows(4).position(|window| window == b"\r\n\r\n") {
         Some(pos) => pos + 4, // Account for \r\n\r\n
         None => return Err(TrackerError::MalformedHttpResponse),
