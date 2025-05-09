@@ -1,3 +1,4 @@
+use crate::{HashedId20, PeerId20};
 use bytes::{BufMut, BytesMut};
 use log::{error, trace};
 use serde::{
@@ -9,8 +10,6 @@ use std::{
     fmt::{Display, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
-
-use crate::{HashedId20, PeerId20};
 
 #[derive(Debug)]
 pub enum TrackerError {

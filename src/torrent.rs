@@ -1,8 +1,9 @@
-use crate::metainfo::{Info, MetaInfo};
-use crate::popup::OpenTorrentResult;
-use crate::tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse};
-use crate::HashedId20;
-// use local_ip_address::local_ip;
+use crate::{
+    metainfo::{Info, MetaInfo},
+    popup::OpenTorrentResult,
+    tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
+    HashedId20,
+};
 use log::info;
 use rand::{rng, Rng};
 use regex::Regex;
@@ -109,8 +110,8 @@ impl Torrent {
         let mut file = File::open(&torrent.path)?;
 
         let mut data = Vec::new();
-        let bytes_read = file.read_to_end(&mut data);
-        info!("open_torrent() read {:?} bytes", bytes_read.unwrap_or(0));
+        let bytes_read = file.read_to_end(&mut data)?;
+        info!("open_torrent() read {} bytes", bytes_read);
 
         // extract info hash
         let mut decoder = bendy::decoding::Decoder::new(&data);
@@ -120,7 +121,7 @@ impl Torrent {
             return Err(OpenTorrentError::MissingInfoDict);
         };
 
-        let mut info_hash: HashedId20 = [0u8; 20];
+        let mut info_hash = HashedId20::default();
         // search for the info key
         while let Ok(Some(pair)) = metainfo_dict.next_pair() {
             if b"info" == pair.0 {

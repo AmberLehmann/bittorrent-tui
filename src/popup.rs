@@ -1,5 +1,3 @@
-use std::net::{IpAddr, Ipv4Addr};
-
 use crate::theme::THEME;
 use crossterm::event::KeyCode;
 use local_ip_address::{linux::local_ipv6, local_ip};
@@ -8,6 +6,7 @@ use ratatui::{
     prelude::*,
     widgets::{Block, BorderType, Clear, Paragraph, Wrap},
 };
+use std::net::{IpAddr, Ipv4Addr};
 
 #[derive(Default)]
 pub struct TextEntry {

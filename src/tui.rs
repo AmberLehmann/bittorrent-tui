@@ -1,12 +1,12 @@
 use crate::{
     logger::LogTab,
-    metainfo::{Info, MetaInfo, SingleFileInfo},
+    metainfo::Info,
     popup::{ConfirmationPopup, OpenTorrentPopup, OpenTorrentResult, PopupStatus},
     theme::THEME,
     torrent::{handle_torrent, Torrent, TorrentInfo, TorrentStatus},
 };
 use color_eyre::Result;
-use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use futures::{FutureExt, StreamExt};
 use log::{debug, error, info, trace};
 use ratatui::{
@@ -16,19 +16,15 @@ use ratatui::{
     style::Stylize,
     symbols::border,
     text::Line,
-    widgets::{Block, Borders, Paragraph, Widget},
+    widgets::{Block, Borders, Widget},
     Frame,
-};
-use std::{
-    io::{Read, Stdout},
-    thread,
 };
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
 
-type Tui = Terminal<CrosstermBackend<Stdout>>;
+type Tui = Terminal<CrosstermBackend<std::io::Stdout>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AppTab {
@@ -318,7 +314,7 @@ pub enum Event {
 pub struct EventHandler {
     _tx: UnboundedSender<Event>,
     rx: UnboundedReceiver<Event>,
-    task: Option<JoinHandle<()>>,
+    _task: Option<JoinHandle<()>>,
 }
 
 impl EventHandler {
@@ -358,7 +354,7 @@ impl EventHandler {
         Self {
             _tx,
             rx,
-            task: Some(task),
+            _task: Some(task),
         }
     }
 

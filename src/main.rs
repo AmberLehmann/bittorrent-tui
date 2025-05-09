@@ -1,6 +1,5 @@
 use crate::{logger::Logger, tui::App};
 use color_eyre::Result;
-//use log::{error, info, trace};
 
 mod args;
 mod handshake;
