@@ -14,6 +14,7 @@ To run the BitTorrent client in TUI mode:
 | `l` or `3` | Navigate to Logs Tab |
 | `j` | Scroll Down |
 | `k` | Scroll Up |
+| `o` | Open `.torrent` file from path |
 
 
 ## Logging
