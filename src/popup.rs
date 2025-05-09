@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use crate::theme::THEME;
 use crossterm::event::KeyCode;
-use local_ip_address::local_ip;
+use local_ip_address::{linux::local_ipv6, local_ip};
 use ratatui::{
     layout::Flex,
     prelude::*,
@@ -425,9 +425,30 @@ impl OpenTorrentPopup {
                 _ => {}
             },
             OpenTorrentField::IpMode => match key {
-                KeyCode::Char('a') => self.ip_mode = IpMode::Auto,
-                KeyCode::Char('4') => self.ip_mode = IpMode::V4,
-                KeyCode::Char('6') => self.ip_mode = IpMode::V6,
+                KeyCode::Char('a') => {
+                    self.ip.set_text(
+                        local_ip()
+                            .unwrap_or(Ipv4Addr::new(0, 0, 0, 0).into())
+                            .to_string(),
+                    );
+                    self.ip_mode = IpMode::Auto;
+                }
+                KeyCode::Char('4') => {
+                    self.ip.set_text(
+                        local_ip()
+                            .unwrap_or(Ipv4Addr::new(0, 0, 0, 0).into())
+                            .to_string(),
+                    );
+                    self.ip_mode = IpMode::V4;
+                }
+                KeyCode::Char('6') => {
+                    self.ip.set_text(
+                        local_ipv6()
+                            .unwrap_or(Ipv4Addr::new(0, 0, 0, 0).into())
+                            .to_string(),
+                    );
+                    self.ip_mode = IpMode::V6;
+                }
                 _ => {}
             },
             OpenTorrentField::Compact => match key {
@@ -494,7 +515,7 @@ impl OpenTorrentPopup {
         self.text_field.clear();
         self.ip.set_text(
             local_ip()
-                .unwrap_or(Ipv4Addr::new(127, 0, 0, 1).into())
+                .unwrap_or(Ipv4Addr::new(0, 0, 0, 0).into())
                 .to_string(),
         );
         self.port.set_text("45123".to_owned());
@@ -539,7 +560,7 @@ impl Widget for &OpenTorrentPopup {
         let [text_area, ip_area, bottom_area] = vertical.areas(win_area);
         let horizontal = Layout::horizontal([
             Constraint::Length(13),
-            Constraint::Length(12),
+            Constraint::Length(15),
             Constraint::Length(16),
         ])
         .flex(Flex::SpaceAround);
@@ -563,7 +584,7 @@ impl Widget for &OpenTorrentPopup {
         buf[(port_area.x + cursor_pos + 7, port_area.y)]
             .set_style(self.get_cursor_style(OpenTorrentField::Port));
 
-        Span::raw(format!(" Mode: {:?} ", self.ip_mode).as_str()).render(ipmode_area, buf);
+        Span::raw(format!(" Ip Mode: {:?} ", self.ip_mode).as_str()).render(ipmode_area, buf);
         buf.set_style(ipmode_area, self.get_style(OpenTorrentField::IpMode));
 
         Span::raw(format!(" Compact: {} ", self.compact).as_str()).render(compact_area, buf);
