@@ -1,7 +1,7 @@
 use crate::{
     logger::LogTab,
     metainfo::{Info, MetaInfo, SingleFileInfo},
-    popup::{ConfirmationPopup, PopupStatus, TextEntryPopup},
+    popup::{ConfirmationPopup, OpenTorrentPopup, OpenTorrentResult, PopupStatus},
     theme::THEME,
     torrent::{handle_torrent, Torrent, TorrentInfo, TorrentStatus},
 };
@@ -42,7 +42,7 @@ pub struct App {
     event_handler: EventHandler,
     log_tab: LogTab,
     save_window: ConfirmationPopup,
-    open_window: TextEntryPopup,
+    open_window: OpenTorrentPopup,
     rx: std::sync::mpsc::Receiver<(log::Level, String)>,
     selected_tab: AppTab,
     torrents: Vec<(
@@ -64,7 +64,7 @@ impl App {
                 "".to_owned(),
                 "Are you sure you want to quit?".to_owned(),
             ),
-            open_window: TextEntryPopup::new(" Enter Path to File ".to_owned(), 1),
+            open_window: OpenTorrentPopup::new(" Open new Torrent ".to_owned(), 1),
             rx,
             selected_tab: AppTab::Downloads,
             torrents: Vec::new(),
@@ -97,12 +97,12 @@ impl App {
             match self.open_window.status {
                 PopupStatus::Closed | PopupStatus::InUse => {}
                 PopupStatus::Canceled => {
-                    self.open_window.close();
+                    self.open_window.reset();
                 }
                 PopupStatus::Confirmed => {
-                    self.open_window.close();
-                    let path = self.open_window.take();
-                    self.open_torrent(&path);
+                    let result = self.open_window.take();
+                    self.open_window.reset();
+                    self.open_torrent(result);
                 }
             }
             // TODO: handle bittorrent stuff
@@ -157,8 +157,13 @@ impl App {
         Ok(())
     }
 
-    fn open_torrent(&mut self, path: &str) {
-        let new_torrent = match Torrent::open(path) {
+    fn open_torrent(&mut self, result: Result<OpenTorrentResult, ()>) {
+        let Ok(torrent) = result else {
+            error!("Invalid fields in open");
+            return;
+        };
+
+        let new_torrent = match Torrent::open(torrent) {
             Ok(f) => f,
             Err(e) => {
                 error!("{e}");

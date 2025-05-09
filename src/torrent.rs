@@ -1,4 +1,5 @@
 use crate::metainfo::{Info, MetaInfo};
+use crate::popup::OpenTorrentResult;
 use crate::tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse};
 use crate::HashedId20;
 // use local_ip_address::local_ip;
@@ -85,13 +86,15 @@ pub struct Torrent {
     pub tracker_addr: SocketAddr,
     pub status: TorrentStatus,
     pub info_hash: HashedId20,
+    pub compact: bool,
+    pub local_addr: SocketAddr,
     //pieces_downloaded: Vec<bool>,
 }
 
 impl Torrent {
-    pub fn open(path: &str) -> Result<Torrent, OpenTorrentError> {
+    pub fn open(torrent: OpenTorrentResult) -> Result<Torrent, OpenTorrentError> {
         let hostname_regex = Regex::new(r"(?P<proto>https?|udp)://(?P<name>[^/]+)").unwrap();
-        let mut file = File::open(path).map_err(OpenTorrentError::FailedToOpen)?;
+        let mut file = File::open(&torrent.path).map_err(OpenTorrentError::FailedToOpen)?;
 
         let mut data = Vec::new();
         let bytes_read = file.read_to_end(&mut data);
@@ -154,6 +157,8 @@ impl Torrent {
                 meta_info: new_meta,
                 tracker_addr: ip,
                 info_hash,
+                local_addr: SocketAddr::new(torrent.ip, torrent.port),
+                compact: torrent.compact,
             }),
             Info::Multi(_) => Err(OpenTorrentError::MultiFile),
         }
@@ -181,7 +186,6 @@ pub async fn handle_torrent(
     _tx: UnboundedSender<TorrentInfo>,
     _rx: UnboundedReceiver<TorrentStatus>,
 ) -> Result<(), TrackerError> {
-    // let local_ipv4 = local_ip()?;
     let left = match &torrent.meta_info.info {
         Info::Multi(_) => return Err(TrackerError::MultiFile),
         Info::Single(f) => f.length,
@@ -190,15 +194,15 @@ pub async fn handle_torrent(
         info_hash: torrent.info_hash,
         peer_id: rng().random(),
         event: Some(TrackerRequestEvent::Started),
-        port: 6881, // Temp hardcoded
+        port: torrent.local_addr.port(),
         uploaded: 0,
         downloaded: 0,
         left,
-        compact: true,     // tested both compact/non-compact deserialization
-        no_peer_id: false, // Ignored for compact
+        compact: torrent.compact, // tested both compact/non-compact deserialization
+        no_peer_id: false,        // Ignored for compact
         // ip: Some(local_ipv4), // Temp default to ipv4, give user ability for ipv6
-        ip: None,      // Temp default to ipv4, give user ability for ipv6
-        numwant: None, // temp default, give user ability to choose
+        ip: Some(torrent.local_addr.ip()), // Temp default to ipv4, give user ability for ipv6
+        numwant: None,                     // temp default, give user ability to choose
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
