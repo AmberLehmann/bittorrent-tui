@@ -411,8 +411,14 @@ impl OpenTorrentPopup {
                 _ => {}
             },
             OpenTorrentField::Ip => match key {
-                KeyCode::Char(c) => self.ip.insert(c),
-                KeyCode::Backspace => self.ip.remove(),
+                KeyCode::Char(c) => {
+                    self.ip.insert(c);
+                    self.ip_mode = IpMode::Auto;
+                }
+                KeyCode::Backspace => {
+                    self.ip.remove();
+                    self.ip_mode = IpMode::Auto;
+                }
                 KeyCode::Left => self.ip.move_cursor_left(),
                 KeyCode::Right => self.ip.move_cursor_right(),
                 _ => {}
@@ -426,27 +432,15 @@ impl OpenTorrentPopup {
             },
             OpenTorrentField::IpMode => match key {
                 KeyCode::Char('a') => {
-                    self.ip.set_text(
-                        local_ip()
-                            .unwrap_or(Ipv4Addr::new(0, 0, 0, 0).into())
-                            .to_string(),
-                    );
+                    self.ip.set_text(Self::get_ip_string(local_ip()));
                     self.ip_mode = IpMode::Auto;
                 }
                 KeyCode::Char('4') => {
-                    self.ip.set_text(
-                        local_ip()
-                            .unwrap_or(Ipv4Addr::new(0, 0, 0, 0).into())
-                            .to_string(),
-                    );
+                    self.ip.set_text(Self::get_ip_string(local_ip()));
                     self.ip_mode = IpMode::V4;
                 }
                 KeyCode::Char('6') => {
-                    self.ip.set_text(
-                        local_ipv6()
-                            .unwrap_or(Ipv4Addr::new(0, 0, 0, 0).into())
-                            .to_string(),
-                    );
+                    self.ip.set_text(Self::get_ip_string(local_ipv6()));
                     self.ip_mode = IpMode::V6;
                 }
                 _ => {}
@@ -459,6 +453,13 @@ impl OpenTorrentPopup {
         }
     }
 
+    fn get_ip_string(ip: Result<IpAddr, local_ip_address::Error>) -> String {
+        match ip {
+            Ok(addr) => addr.to_string(),
+            Err(e) => format!("{e}"),
+        }
+    }
+
     pub fn new(title: String, max_lines: u16) -> Self {
         OpenTorrentPopup {
             text_field: TextEntry::new(),
@@ -466,12 +467,7 @@ impl OpenTorrentPopup {
             status: PopupStatus::default(),
             max_lines,
             port: TextEntry::with_text("45123".to_owned()).with_max(5),
-            ip: TextEntry::with_text(
-                local_ip()
-                    .unwrap_or(Ipv4Addr::new(127, 0, 0, 1).into())
-                    .to_string(),
-            )
-            .with_max(39),
+            ip: TextEntry::with_text(Self::get_ip_string(local_ip())).with_max(39),
             ip_mode: IpMode::default(),
             compact: true,
             selected: OpenTorrentField::default(),
