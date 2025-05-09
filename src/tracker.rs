@@ -117,6 +117,7 @@ impl TrackerRequest {
         buf.put_slice(b" HTTP/1.1\r\n");
 
         write!(buf, "Host: {}\r\n", announce).unwrap();
+        buf.put_slice(b"Connection: close\r\n");
 
         buf.put_slice(b"\r\n");
         buf
