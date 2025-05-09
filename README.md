@@ -5,16 +5,31 @@ WIP BitTorrent client implementation for CMSC417 written in Rust.
 To run the BitTorrent client in TUI mode: 
 `cargo run`
 
+## Key Mappings
+
+### Main Menu
 
 | Key | Action |
 | -------- | ------- |
-| `q`  | Quit out of TUI |
+| `q` or `Esc` | Quit out of TUI |
 | `d` or `1` | Navigate to Downloads Tab |
 | `t` or `2` | Navigate to Torrent Tab |
 | `l` or `3` | Navigate to Logs Tab |
 | `j` | Scroll Down |
 | `k` | Scroll Up |
 | `o` | Open `.torrent` file from path |
+
+### Open Torrent Popup
+
+| Key | Action |
+| -------- | ------- |
+| `Esc` | Close Popup |
+| `Tab` | Select Next Field |
+| `BackTab` | Select Previous Field |
+| `t`,`f` | Set Compact Field |
+| `a`,`4`,`6` | Set Ip Mode Field |
+| `Enter` | Open Torrent |
+
 
 ## Logging
 The Logs Tab will include information about the state of the program. If an error occurs, an Error will be printed here.
