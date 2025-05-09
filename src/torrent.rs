@@ -1,15 +1,15 @@
-use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
+use crate::metainfo::{Info, MetaInfo};
 use crate::tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse};
-use crate::{HashedId20, PeerId20};
-use local_ip_address::local_ip;
-use log::{debug, error, info};
+use crate::HashedId20;
+// use local_ip_address::local_ip;
+use log::info;
 use rand::{rng, Rng};
 use regex::Regex;
 use sha1::{Digest, Sha1};
 use std::{
     fmt::Display,
     fs::File,
-    io::{Read, Write},
+    io::Read,
     net::{SocketAddr, ToSocketAddrs},
 };
 use tokio::{
@@ -198,14 +198,15 @@ pub async fn handle_torrent(
         .read_to_end(&mut buf)
         .await
         .map_err(TrackerError::Async)?;
-    let header_end = buf.windows(4).position(|window| window == b"\r\n\r\n");
-    let header_end = match header_end {
+    let header_end = match buf.windows(4).position(|window| window == b"\r\n\r\n") {
         Some(pos) => pos + 4, // Account for \r\n\r\n
         None => return Err(TrackerError::MalformedHttpResponse),
     };
     let response: TrackerResponse = bendy::serde::from_bytes(&buf[header_end..])?;
-    info!("Received initial tracker response");
-    debug!("{:?}", response);
+    info!(
+        "Tracker response received: client assigned {} peers.",
+        response.peers.len()
+    );
 
     Ok(())
 }

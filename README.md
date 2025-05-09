@@ -16,7 +16,6 @@ To run the BitTorrent client in TUI mode:
 | `k` | Scroll Up |
 | `o` | Open `.torrent` file from path |
 
-
 ## Logging
 The Logs Tab will include information about the state of the program. If an error occurs, an Error will be printed here.
 If anything is not working as expected, check the Logs tab for Errors.

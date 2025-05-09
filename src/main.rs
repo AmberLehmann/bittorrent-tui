@@ -1,6 +1,5 @@
 use crate::{logger::Logger, tui::App};
 use color_eyre::Result;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 //use log::{error, info, trace};
 
 mod args;

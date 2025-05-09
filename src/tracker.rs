@@ -1,13 +1,12 @@
 use bytes::{BufMut, BytesMut};
 use log::{error, trace};
 use serde::{
-    de::{self, Error},
+    de::{self},
     Deserialize,
 };
 use serde_bytes::ByteBuf;
 use std::{
     fmt::{Display, Write},
-    fs::write,
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
@@ -60,8 +59,6 @@ impl Display for TrackerRequestEvent {
         )
     }
 }
-
-// TODO: Probably want to create a type with traits
 
 #[derive(Debug)]
 pub struct TrackerRequest {

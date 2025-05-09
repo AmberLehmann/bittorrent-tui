@@ -55,6 +55,12 @@ pub struct LogTab {
     spans: [Span<'static>; 5],
 }
 
+impl Default for LogTab {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LogTab {
     pub fn new() -> Self {
         Self {
