@@ -182,8 +182,7 @@ pub async fn handle_torrent(
         .read_to_end(&mut buf)
         .await
         .map_err(TrackerError::Async)?;
-    let header_end = buf.windows(4).position(|window| window == b"\r\n\r\n");
-    let header_end = match header_end {
+    let header_end = match buf.windows(4).position(|window| window == b"\r\n\r\n") {
         Some(pos) => pos + 4, // Account for \r\n\r\n
         None => return Err(TrackerError::MalformedHttpResponse),
     };
