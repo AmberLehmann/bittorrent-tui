@@ -169,7 +169,7 @@ impl App {
         let info = new_torrent.get_info();
         let name = match &new_torrent.meta_info.info {
             Info::Single(f) => f.name.clone(),
-            Info::Multi(_) => unreachable!(),
+            Info::Multi(f) => f.name.clone(),
         };
         let (tx1, rx1) = tokio::sync::mpsc::unbounded_channel();
         let (tx2, rx2) = tokio::sync::mpsc::unbounded_channel();
