@@ -11,11 +11,11 @@ use std::{
     fs::File,
     io::{Read, Write},
     net::{SocketAddr, ToSocketAddrs},
-    sync::mpsc::{Receiver, Sender},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
 };
 
 #[derive(Debug)]
@@ -45,7 +45,7 @@ impl Display for OpenTorrentError {
 
 impl std::error::Error for OpenTorrentError {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum TorrentStatus {
     Waiting,   // signifies that this torrent is awaiting a response from the tracker
     Connected, // connection has been established with the tracker
@@ -139,12 +139,28 @@ impl Torrent {
             Info::Multi(_) => Err(OpenTorrentError::MultiFile),
         }
     }
+
+    pub fn get_info(&self) -> TorrentInfo {
+        let size = match &self.meta_info.info {
+            Info::Single(f) => f.length,
+            Info::Multi(_) => unreachable!(),
+        };
+
+        TorrentInfo {
+            size,
+            progress: 0,
+            status: self.status,
+            seeds: 0,
+            peers: 0,
+            speed: 0,
+        }
+    }
 }
 
 pub async fn handle_torrent(
     torrent: Torrent,
-    tx: Sender<TorrentInfo>,
-    rx: Receiver<TorrentStatus>,
+    _tx: UnboundedSender<TorrentInfo>,
+    _rx: UnboundedReceiver<TorrentStatus>,
 ) -> Result<(), TrackerError> {
     // let local_ipv4 = local_ip()?;
     let left = match &torrent.meta_info.info {

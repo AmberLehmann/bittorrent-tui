@@ -3,10 +3,11 @@ use crate::{
     metainfo::{Info, MetaInfo, SingleFileInfo},
     popup::{ConfirmationPopup, PopupStatus, TextEntryPopup},
     theme::THEME,
-    torrent::{handle_torrent, Torrent, TorrentStatus},
+    torrent::{handle_torrent, Torrent, TorrentInfo, TorrentStatus},
 };
 use color_eyre::Result;
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
+use futures::{FutureExt, StreamExt};
 use log::{debug, error, info, trace};
 use ratatui::{
     buffer::Buffer,
@@ -21,6 +22,10 @@ use ratatui::{
 use std::{
     io::{Read, Stdout},
     thread,
+};
+use tokio::{
+    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+    task::JoinHandle,
 };
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
@@ -40,7 +45,13 @@ pub struct App {
     open_window: TextEntryPopup,
     rx: std::sync::mpsc::Receiver<(log::Level, String)>,
     selected_tab: AppTab,
-    torrents: Vec<Torrent>,
+    torrents: Vec<(
+        String,
+        tokio::task::JoinHandle<()>,
+        UnboundedSender<TorrentStatus>,
+        UnboundedReceiver<TorrentInfo>,
+        TorrentInfo,
+    )>,
 }
 
 impl App {
@@ -155,14 +166,20 @@ impl App {
             }
         };
         // send out initial request to
-        self.torrents.push(new_torrent.clone()); // TODO: Change to torrent status
-        let (tx1, rx1) = std::sync::mpsc::channel();
-        let (tx2, rx2) = std::sync::mpsc::channel();
-        tokio::spawn(async {
+        let info = new_torrent.get_info();
+        let name = match &new_torrent.meta_info.info {
+            Info::Single(f) => f.name.clone(),
+            Info::Multi(_) => unreachable!(),
+        };
+        let (tx1, rx1) = tokio::sync::mpsc::unbounded_channel();
+        let (tx2, rx2) = tokio::sync::mpsc::unbounded_channel();
+        let handle = tokio::spawn(async move {
             if let Err(e) = handle_torrent(new_torrent, tx1, rx2).await {
                 error!("{e}");
             }
         });
+
+        self.torrents.push((name, handle, tx2, rx1, info));
     }
 
     // RENDERING CODE
@@ -193,18 +210,13 @@ impl App {
             Span::raw(t).render(title_bar_areas[i], buf);
         }
 
-        for torrent in &self.torrents {
+        for (torrent_name, _, _, _, torrent) in &self.torrents {
             let [_icon, name, size, _progress, status, _seeds, _peers, _speed, _todo] =
                 horizontal.areas(canvas);
 
-            match &torrent.meta_info.info {
-                Info::Multi(_) => {}
-                Info::Single(f) => {
-                    Span::raw(&f.name).render(name, buf);
-                    Span::raw(format!("{:?}", torrent.status)).render(status, buf);
-                    Span::raw(convert_to_human(f.length)).render(size, buf);
-                }
-            }
+            Span::raw(torrent_name).render(name, buf);
+            Span::raw(format!("{:?}", torrent.status)).render(status, buf);
+            Span::raw(convert_to_human(torrent.size)).render(size, buf);
 
             canvas.y += 1;
         }
@@ -289,8 +301,6 @@ fn convert_to_human(bytes: u64) -> String {
     }
     format!("{} {}", bytes >> (6 * 10), UNITS[6])
 }
-use futures::{FutureExt, StreamExt};
-use tokio::{sync::mpsc, task::JoinHandle};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Event {
@@ -301,8 +311,8 @@ pub enum Event {
 
 #[derive(Debug)]
 pub struct EventHandler {
-    _tx: mpsc::UnboundedSender<Event>,
-    rx: mpsc::UnboundedReceiver<Event>,
+    _tx: UnboundedSender<Event>,
+    rx: UnboundedReceiver<Event>,
     task: Option<JoinHandle<()>>,
 }
 
