@@ -1,7 +1,6 @@
 use crate::metainfo::{Info, MetaInfo, SingleFileInfo};
-use crate::tracker::{TrackerRequest, TrackerRequestEvent, TrackerResponse};
+use crate::tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse};
 use crate::{HashedId20, PeerId20};
-use bendy::serde;
 use local_ip_address::local_ip;
 use log::{debug, error, info};
 use rand::{rng, Rng};
@@ -43,6 +42,8 @@ impl Display for OpenTorrentError {
         }
     }
 }
+
+impl std::error::Error for OpenTorrentError {}
 
 #[derive(Clone, Debug)]
 pub enum TorrentStatus {
@@ -144,49 +145,51 @@ pub async fn handle_torrent(
     torrent: Torrent,
     tx: Sender<TorrentInfo>,
     rx: Receiver<TorrentStatus>,
-) {
-    debug!("Hello?");
-    let Ok(local_ip_v4) = local_ip() else {
-        error!("Unable to get local IPv4");
-        return;
+) -> Result<(), TrackerError> {
+    // let local_ipv4 = local_ip()?;
+    let left = match &torrent.meta_info.info {
+        Info::Multi(_) => return Err(TrackerError::MultiFile),
+        Info::Single(f) => f.length,
     };
-    // TODO: Get 20 byte Sha1 hash from info key in metainfo
-    let peer_id: PeerId20 = rng().random();
-    debug!("Info hash: {:?}", torrent.info_hash);
-    // TODO: Construct TrackerRequest
     let request = TrackerRequest {
         info_hash: torrent.info_hash,
-        peer_id,
+        peer_id: rng().random(),
         event: Some(TrackerRequestEvent::Started),
         port: 6881, // Temp hardcoded
         uploaded: 0,
         downloaded: 0,
-        left: 100,
-        compact: true,
-        no_peer_id: false,     // Ignored for compact
-        ip: Some(local_ip_v4), // Temp default to ipv4, give user ability for ipv6
-        // ip: None,      // Temp default to ipv4, give user ability for ipv6
+        left,
+        compact: true,     // tested both compact/non-compact deserialization
+        no_peer_id: false, // Ignored for compact
+        // ip: Some(local_ipv4), // Temp default to ipv4, give user ability for ipv6
+        ip: None,      // Temp default to ipv4, give user ability for ipv6
         numwant: None, // temp default, give user ability to choose
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
-    let Ok(mut stream) = TcpStream::connect(torrent.tracker_addr).await else {
-        error!("Could not connect to tracker");
-        return;
-    };
+    let mut stream = TcpStream::connect(torrent.tracker_addr)
+        .await
+        .map_err(TrackerError::Async)?;
     let http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
 
-    stream.write_all(&http_msg[..]).await.unwrap();
+    stream
+        .write_all(&http_msg[..])
+        .await
+        .map_err(TrackerError::Async)?;
     info!("Sent initial request to tracker.");
-    debug!("{:?}", http_msg);
-    stream.flush().await.unwrap();
-    debug!("Flushed buffer.");
     let mut buf: Vec<u8> = vec![];
-    stream.read_to_end(&mut buf).await.unwrap();
-    debug!("{:?}", buf);
-    let response: TrackerResponse = bendy::serde::from_bytes(&buf[..]).unwrap();
+    stream
+        .read_to_end(&mut buf)
+        .await
+        .map_err(TrackerError::Async)?;
+    let header_end = buf.windows(4).position(|window| window == b"\r\n\r\n");
+    let header_end = match header_end {
+        Some(pos) => pos + 4, // Account for \r\n\r\n
+        None => return Err(TrackerError::MalformedHttpResponse),
+    };
+    let response: TrackerResponse = bendy::serde::from_bytes(&buf[header_end..])?;
+    info!("Received initial tracker response");
     debug!("{:?}", response);
-    error!("torrent thread not implemented");
 
-    //unimplemented!();
+    Ok(())
 }

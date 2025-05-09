@@ -7,7 +7,7 @@ use crate::{
 };
 use color_eyre::Result;
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -159,7 +159,9 @@ impl App {
         let (tx1, rx1) = std::sync::mpsc::channel();
         let (tx2, rx2) = std::sync::mpsc::channel();
         tokio::spawn(async {
-            handle_torrent(new_torrent, tx1, rx2).await;
+            if let Err(e) = handle_torrent(new_torrent, tx1, rx2).await {
+                error!("{e}");
+            }
         });
     }
 

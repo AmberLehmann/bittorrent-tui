@@ -16,7 +16,12 @@ use crate::{HashedId20, PeerId20};
 #[derive(Debug)]
 pub enum TrackerError {
     FailedToDecode(bendy::serde::error::Error),
+    Async(tokio::io::Error),
+    MultiFile,
+    MalformedHttpResponse,
 }
+
+impl std::error::Error for TrackerError {}
 
 impl From<bendy::serde::error::Error> for TrackerError {
     fn from(e: bendy::serde::error::Error) -> Self {
@@ -28,6 +33,9 @@ impl Display for TrackerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::FailedToDecode(e) => e.fmt(f),
+            Self::Async(e) => e.fmt(f),
+            Self::MalformedHttpResponse => write!(f, "Invalid http/message split"),
+            Self::MultiFile => write!(f, "Multifile mode is currently not supported"),
         }
     }
 }
