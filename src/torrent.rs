@@ -314,6 +314,13 @@ pub async fn handle_torrent(
     // so start listening and being prepeated to accept incoming connections
     // and connect to 30 of the peers from the response
 
+    // we also need to be periodically making requests to the tracker
+    // based on the interval from the tracker response 
+    // which have info like uploaded, downloaded, left
+    // as well as "event" started/stopped/completed
+    // presumably we should send stopped when we finish
+    // unless we'd violate min interval(?)
+
     // for each connection we form, send a handshake
     // expect a handshake back
     // make sure if there is a peer_id, it should match the peer_id we're 
