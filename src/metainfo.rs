@@ -4,7 +4,7 @@ use serde_bytes::ByteBuf;
 #[derive(Debug, Deserialize, Clone)]
 pub struct SingleFileInfo {
     #[serde(rename = "piece length")]
-    pub piece_length: u32,
+    pub piece_length: u64,
     pub pieces: ByteBuf,
     #[serde(default)]
     pub private: u32,

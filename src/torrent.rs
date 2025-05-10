@@ -93,6 +93,14 @@ pub struct TorrentInfo {
     pub speed: u64,
 }
 
+#[derive(Copy, Clone)]
+pub enum PieceStatus {
+    NotRequested,
+    Requested,
+    NotConfirmed,
+    Confirmed
+}
+
 #[derive(Clone)]
 pub struct Torrent {
     pub meta_info: MetaInfo,
@@ -103,7 +111,8 @@ pub struct Torrent {
     pub info_hash: HashedId20,
     pub compact: bool,
     pub local_addr: SocketAddr,
-    //pieces_downloaded: Vec<bool>,
+    // the data in the u8 vec, the status, the length that we know about
+    pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
 }
 
 impl Torrent {
@@ -159,11 +168,12 @@ impl Torrent {
         };
         let ip = addr?.next().ok_or(OpenTorrentError::UnableToResolve)?;
 
-        info!("caps: {:?}", caps);
-
         // get url paths
-        let new_announce_path: String = caps.name("path").unwrap().as_str().to_owned();
-        info!("new_announce_path: {}", new_announce_path);
+        let mut new_announce_path: String = caps.name("path").unwrap().as_str().to_owned();
+        if new_announce_path.is_empty() {
+            new_announce_path = "/".to_owned();
+        }
+        log::debug!("new_announce_path: {}", new_announce_path);
         let mut new_scrape_path: Option<String> = None;
         match new_announce_path.rfind('/') {
             Some(pos_slash) => {
@@ -181,19 +191,35 @@ impl Torrent {
             },
             None => {}
         }
+        log::debug!("new_scrape_path: {:?}", new_scrape_path);
 
+        match &new_meta.info {
+            Info::Single(info_stuff) => {
+                // pieces to download 
+                let num_pieces = (info_stuff.length / info_stuff.piece_length) as usize;
+                let mut pieces_to_download = Vec::with_capacity(num_pieces);
+                for _ in 0..num_pieces {
+                    pieces_to_download.push(
+                        (Some(vec![0u8; info_stuff.piece_length as usize]), 
+                        PieceStatus::NotRequested,
+                        0) // to be updated as we learn about the size of this piece (not sure if useful or not but i think it will be)
+                    );
+                }
 
-        match new_meta.info {
-            Info::Single(_) => Ok(Torrent {
-                status: TorrentStatus::Waiting,
-                meta_info: new_meta,
-                tracker_addr: ip,
-                announce_path: new_announce_path,
-                scrape_path: new_scrape_path,
-                info_hash,
-                local_addr: SocketAddr::new(torrent.ip, torrent.port),
-                compact: torrent.compact,
-            }),
+                Ok(
+                    Torrent {
+                        status: TorrentStatus::Waiting,
+                        meta_info: new_meta,
+                        tracker_addr: ip,
+                        announce_path: new_announce_path,
+                        scrape_path: new_scrape_path,
+                        info_hash,
+                        local_addr: SocketAddr::new(torrent.ip, torrent.port),
+                        compact: torrent.compact,
+                        pieces_downloaded: pieces_to_download
+                    }
+                )
+            },
             Info::Multi(_) => Err(OpenTorrentError::MultiFile),
         }
     }
@@ -257,6 +283,41 @@ pub async fn handle_torrent(
         "Tracker response received: client assigned {} peers.",
         response.peers.len()
     );
+
+    // TODO
+    // talk to peers now
+
+    // ok so our torrent has
+    // pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
+    // pub local_addr: SocketAddr,
+
+    // and the response has
+    // pub peers: Vec<PeerInfo>
+    // pub interval: u64
+    // pub min_interval: Option<u64>
+    // pub tracker_id: Option<ByteBuf>
+    // where 
+    // pub struct PeerInfo {
+    //     pub addr: SocketAddr,
+    //     pub peer_id: Option<Vec<u8>>
+    // }
+
+    // "the official client version 3 in fact only actively forms new connections 
+    // if it has less than 30 peers and will refuse connections if it has 55."
+    // so start listening and being prepeated to accept incoming connections
+    // and connect to 30 of the peers from the response
+
+    // for each connection we form, send a handshake
+    // expect a handshake back
+    // make sure if there is a peer_id, it should match the peer_id we're 
+    // expecting from this connection based on the tracker info
+
+    // for each connection we accept, expect a handshake 
+    // read in the handshake up to the info hash
+    // if the info hash does not match, close the connection
+    // if it does, be prepared that you may or may not get a peer_id as well
+
+    // done talking to peers
 
     Ok(())
 }

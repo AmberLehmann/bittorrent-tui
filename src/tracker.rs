@@ -129,7 +129,7 @@ impl TrackerRequest {
 
         buf.put_slice(b"\r\n");
 
-        log::info!("Encoded HTTP GET: {:?}", buf);
+        log::debug!("Encoded HTTP GET: {:?}", buf);
 
         buf
     }
@@ -148,17 +148,23 @@ pub struct TrackerResponse {
     pub tracker_id: Option<ByteBuf>,
     pub incomplete: u64,
     #[serde(deserialize_with = "deserialize_peers")]
-    pub peers: Vec<SocketAddr>,
+    pub peers: Vec<PeerInfo>
+}
+
+#[derive(Debug)]
+pub struct PeerInfo {
+    pub addr: SocketAddr,
+    pub peer_id: Option<Vec<u8>>
 }
 
 // Custom Deserialization for Peers, should support compact format
-fn deserialize_peers<'de, D>(deserializer: D) -> Result<Vec<SocketAddr>, D::Error>
+fn deserialize_peers<'de, D>(deserializer: D) -> Result<Vec<PeerInfo>, D::Error>
 where
     D: de::Deserializer<'de>,
 {
     struct Visitor;
     impl<'de> de::Visitor<'de> for Visitor {
-        type Value = Vec<SocketAddr>;
+        type Value = Vec<PeerInfo>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter
@@ -182,7 +188,10 @@ where
                 let ip_addr = Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]);
                 let port: u16 = u16::from_be_bytes([chunk[4], chunk[5]]);
                 let peer = SocketAddr::new(IpAddr::V4(ip_addr), port);
-                peers.push(peer);
+                peers.push(PeerInfo {
+                    addr: peer,
+                    peer_id: None,
+                });
             }
             Ok(peers)
         }
@@ -197,10 +206,13 @@ where
             struct TempPeer {
                 ip: String,
                 port: u16,
+                #[serde(rename = "peer id")]
+                #[serde(default)]
+                peer_id: ByteBuf,
             }
             // size_hint() gets the size if included in the SeqAccess
             let mut peers = Vec::with_capacity(seq.size_hint().unwrap_or(0));
-            while let Some(TempPeer { ip, port }) = seq.next_element()? {
+            while let Some(TempPeer { ip, port, peer_id }) = seq.next_element()? {
                 let ip = match ip.parse() {
                     Ok(v) => v,
                     _ => {
@@ -208,8 +220,12 @@ where
                         continue;
                     }
                 };
-                peers.push(SocketAddr::new(ip, port));
+                peers.push(PeerInfo {
+                    addr: SocketAddr::new(ip, port),
+                    peer_id: if peer_id.is_empty() {None} else {Some(peer_id.into_vec())}
+                });
             }
+            log::debug!("peers: {:?}", peers);
             Ok(peers)
         }
     }
