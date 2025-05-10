@@ -102,6 +102,13 @@ pub enum PieceStatus {
 }
 
 #[derive(Clone)]
+pub struct PieceInfo {
+    data: Vec<u8>,
+    status: PieceStatus,
+    length: i64
+}
+
+#[derive(Clone)]
 pub struct Torrent {
     pub meta_info: MetaInfo,
     pub tracker_addr: SocketAddr,
@@ -112,7 +119,7 @@ pub struct Torrent {
     pub compact: bool,
     pub local_addr: SocketAddr,
     // the data in the u8 vec, the status, the length that we know about
-    pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
+    pub pieces_downloaded: Vec<PieceInfo>
 }
 
 impl Torrent {
@@ -199,11 +206,11 @@ impl Torrent {
                 let num_pieces = (info_stuff.length / info_stuff.piece_length) as usize;
                 let mut pieces_to_download = Vec::with_capacity(num_pieces);
                 for _ in 0..num_pieces {
-                    pieces_to_download.push(
-                        (Some(vec![0u8; info_stuff.piece_length as usize]), 
-                        PieceStatus::NotRequested,
-                        0) // to be updated as we learn about the size of this piece (not sure if useful or not but i think it will be)
-                    );
+                    pieces_to_download.push(PieceInfo {
+                        data: vec![0u8; info_stuff.piece_length as usize], 
+                        status: PieceStatus::NotRequested,
+                        length: 0 // to be updated as we learn about the size of this piece (not sure if useful or not but i think it will be)
+                    });
                 }
 
                 Ok(
@@ -315,9 +322,33 @@ pub async fn handle_torrent(
     // for each connection we accept, expect a handshake 
     // read in the handshake up to the info hash
     // if the info hash does not match, close the connection
-    // if it does, be prepared that you may or may not get a peer_id as well
+    // if it does, be prepared that you may or may not get a peer_id as well and deal with that as needed(?)
+    // then send a handshake back
+
+    // once the handshake happens, we optionally send a bitfield
+    // and/or optionally expect a bitfield
+    // and must drop if it doesn't match expectations
+    // "optional" meaning don't send if you have no pieces
+    // if you have pieces you must send it lol
+
+    // ok so make a structure here(?) for connections
+    // holding ConnectedPeer type values
+    // start with the 30 of them
+
+    // then do tokio stuff
+
 
     // done talking to peers
 
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct ConnectedPeer {
+    pub addr: SocketAddr,
+    pub peer_id: Option<Vec<u8>>,
+    pub am_choking: u8,
+    pub am_interested: u8,
+    pub peer_choking: u8,
+    pub peer_interested: u8
 }
