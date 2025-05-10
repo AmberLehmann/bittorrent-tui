@@ -331,13 +331,40 @@ pub async fn handle_torrent(
     // "optional" meaning don't send if you have no pieces
     // if you have pieces you must send it lol
 
+    // therefore we need to create a bitfield:
+    // TODO: create bitfield from pieces_downloaded in clever way
+
     // ok so make a structure here(?) for connections
     // holding ConnectedPeer type values
-    // start with the 30 of them
+    // start with the 30 of them, both sides choking and both sides interested
 
-    // then do tokio stuff
+    // then I assume we send "interested" if they have stuff I don't have based on the bitfield??
+    // and we wait for them to unchoke us
+    // once this is true we can send them requests
+    
+    // we need to send keep-alives every <2 minutes
+
+    // we need to choke/unchoke/interested/not interested
+    // based on Choking and Optimistic Unchoking
+    // blocks are uploaded when we are not choking them, and they are interested in us
+    // assumption: we can request things when they are not choking us and we are interested in them
+
+    // we need to send "have"s whenever we get a new piece fully
+
+    // we need to send requests for things of up to size 2^14(?) based on the downloading strategy
+    // when we receive responses to these, calculate upload rate?
+    // must set a timeout of 60secs for "anti-snubbing"
+    // in which case mark the piece as open to be requested by another thread
+    // and for anti-snubbing maybe(?) mark this guy as choked and do ???? i don't really get this
+    // i guess mark them as having a shit upload rate or something? idk
+
+    // we need to respond to requests for things, and/or not based on a "cancel"
+    //      we are advised to keep a few (10ish?) unfullfilled requests on each connection??
 
 
+
+    // ec: enter endgame mode eventually
+    
     // done talking to peers
 
     Ok(())
