@@ -97,6 +97,8 @@ pub struct TorrentInfo {
 pub struct Torrent {
     pub meta_info: MetaInfo,
     pub tracker_addr: SocketAddr,
+    pub announce_path: String,
+    pub scrape_path: Option<String>,
     pub status: TorrentStatus,
     pub info_hash: HashedId20,
     pub compact: bool,
@@ -106,7 +108,7 @@ pub struct Torrent {
 
 impl Torrent {
     pub fn open(torrent: OpenTorrentResult) -> Result<Torrent, OpenTorrentError> {
-        let hostname_regex = Regex::new(r"(?P<proto>https?|udp)://(?P<name>[^/]+)").unwrap();
+        let hostname_regex = Regex::new(r"(?P<proto>https?|udp)://(?P<name>[^/]+)(?P<path>.*)").unwrap();
         let mut file = File::open(&torrent.path)?;
 
         let mut data = Vec::new();
@@ -157,11 +159,37 @@ impl Torrent {
         };
         let ip = addr?.next().ok_or(OpenTorrentError::UnableToResolve)?;
 
+        info!("caps: {:?}", caps);
+
+        // get url paths
+        let new_announce_path: String = caps.name("path").unwrap().as_str().to_owned();
+        info!("new_announce_path: {}", new_announce_path);
+        let mut new_scrape_path: Option<String> = None;
+        match new_announce_path.rfind('/') {
+            Some(pos_slash) => {
+                match new_announce_path.get(pos_slash..) {
+                    Some(ann_slice) => {
+                        if ann_slice.starts_with("/announce") {
+                            let before = &new_announce_path[..pos_slash];
+                            let after = &new_announce_path[(pos_slash + 9)..]; // "/announce".len()
+                            let new_scrape_string = format!("{}/scrape{}", before, after);
+                            new_scrape_path = Some(new_scrape_string);
+                        }
+                    },
+                    None => {}
+                }
+            },
+            None => {}
+        }
+
+
         match new_meta.info {
             Info::Single(_) => Ok(Torrent {
                 status: TorrentStatus::Waiting,
                 meta_info: new_meta,
                 tracker_addr: ip,
+                announce_path: new_announce_path,
+                scrape_path: new_scrape_path,
                 info_hash,
                 local_addr: SocketAddr::new(torrent.ip, torrent.port),
                 compact: torrent.compact,
@@ -208,6 +236,7 @@ pub async fn handle_torrent(
         no_peer_id: false,        // Ignored for compact
         // ip: Some(local_ipv4), // Temp default to ipv4, give user ability for ipv6
         ip: Some(torrent.local_addr.ip()), // Temp default to ipv4, give user ability for ipv6
+        announce_path: torrent.announce_path,
         numwant: None,                     // temp default, give user ability to choose
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.

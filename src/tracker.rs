@@ -77,6 +77,7 @@ pub struct TrackerRequest {
     pub compact: bool,
     pub no_peer_id: bool,
     pub ip: Option<std::net::IpAddr>,
+    pub announce_path: String,
     pub numwant: Option<usize>,
     pub key: Option<Box<str>>,
     pub trackerid: Option<Box<str>>,
@@ -86,9 +87,11 @@ impl TrackerRequest {
     pub fn encode_http_get(&self, announce: String) -> BytesMut {
         use urlencoding::encode_binary;
         let mut buf = BytesMut::with_capacity(512);
+
         write!(
             buf,
-            "GET /announce?info_hash={}&peer_id={}",
+            "GET {}?info_hash={}&peer_id={}",
+            &self.announce_path,
             encode_binary(&self.info_hash),
             encode_binary(&self.peer_id)
         )
@@ -117,7 +120,7 @@ impl TrackerRequest {
             write!(buf, "&key={k}").unwrap();
         }
         if let Some(t) = &self.trackerid {
-            write!(buf, "&key={t}").unwrap();
+            write!(buf, "&trackerid={t}").unwrap();
         }
         buf.put_slice(b" HTTP/1.1\r\n");
 
@@ -125,6 +128,9 @@ impl TrackerRequest {
         buf.put_slice(b"Connection: close\r\n");
 
         buf.put_slice(b"\r\n");
+
+        log::info!("Encoded HTTP GET: {:?}", buf);
+
         buf
     }
 }
@@ -228,6 +234,7 @@ mod tests {
             compact: false,
             no_peer_id: false,
             ip: Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+            announce_path: "/announce".to_owned(),
             numwant: Some(2),
             key: Some("secret".into()),
             trackerid: Some("trackster".into()),

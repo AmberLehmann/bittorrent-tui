@@ -45,19 +45,6 @@ Along with your implementation, you must submit a report that details:
 
 You can find information on the BitTorrent specification in [1], [2], and [3].
 
-### Libraries
-
-You are generally prohibited from using third-party libraries, except for a bencoder/bdecoder library of your choosing. See “Implementations” in [1] for possible bencoder/bdecoder libraries. If your standard library contains features such as HTTP, do not use that. When in doubt, post. If you use C, you can use any data structures or libraries you like, so long as they are “equivalent” to the libraries in Python in terms of power. It’s a good idea to ask, but ideally you’d have “equal power” no matter what language you choose. You may use the SHA-1 hashing functions we provided for Assignment 4, which can be found in the ‘materials’ repository.
-
-Rust 1.75.0
-Disallowed Crates: tokio, anything async
-Allowed Crates: mio, serde, serde_json, rand, log, libc, bytes, clap, thiserror, gethostname, zerocopy
-
-Piazza:
-"urlencoding is also fine."
-"Is there a preferred bencode alternative?" - "No opinions here—I ain't no rustacean."
-"can we use the regex rust crate" - "I'm sure you can do this fine with other methods, but sure."
-
 ### Reference Client
 
 You can download a reference BitTorrent client for Windows/MacOS/Linux at:
@@ -430,14 +417,10 @@ NOTE: EC: "Propshare [5]", see Algorithm 4 Proportional share auction clearing.
 
 ## Rough Outline from Discord
 
-For BitTorrent, a multi-threaded implementation is practically a must. The mio crate provides similar low level networking functions like poll() in C. We are planning to divide peers into thread-pools, so one thread handles multiple peers. When we spawn a thread, we need a way for the worker thread to communicate with the main thread. Rust's std::sync::mspc (multi producer single consumer) provides a way for threads to communicate with each other on channels. mios's Waker will be used to alert the main thread when a worker thread is ready to receive data on a channel. This will be detected by Poll. 
-
-Essentially, this setup should, hypothetically, allow us to dispatch events between the main event loop and each worker thread without our TCP socket blocking. Essentially, this is a light weight, lower-level implementation of async. 
-
 Rust 1.75.0
-Disallowed Crates: tokio, anything async
 Allowed Crates: mio, serde, serde_json, rand, log, libc, bytes, clap, thiserror, gethostname, zerocopy
 
 "urlencoding is also fine."
 "Is there a preferred bencode alternative?" - "No opinions here—I ain't no rustacean." (just use bencode I guess)
 "can we use the regex rust crate" - "I'm sure you can do this fine with other methods, but sure."
+"tokio and async is allowed"
