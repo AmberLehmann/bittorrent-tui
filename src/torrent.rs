@@ -289,7 +289,7 @@ pub async fn handle_torrent(
     // talk to peers now
 
     // ok so our torrent has
-    // pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
+    // pub pieces_downloaded: Vec<{Option<Vec<u8>>, PieceStatus, usize}>
     // pub local_addr: SocketAddr,
 
     // and the response has
