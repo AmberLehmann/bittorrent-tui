@@ -3,6 +3,7 @@ use crate::{
     popup::OpenTorrentResult,
     tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20,
+    PeerId20
 };
 use log::info;
 use rand::{rng, Rng};
@@ -13,10 +14,11 @@ use std::{
     fs::File,
     io::Read,
     net::{SocketAddr, ToSocketAddrs},
+    sync::{Arc, Mutex}
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
+    net::{TcpStream, TcpListener},
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
 };
 
@@ -116,10 +118,11 @@ pub struct Torrent {
     pub scrape_path: Option<String>,
     pub status: TorrentStatus,
     pub info_hash: HashedId20,
+    pub my_peer_id: PeerId20,
     pub compact: bool,
     pub local_addr: SocketAddr,
     // the data in the u8 vec, the status, the length that we know about
-    pub pieces_downloaded: Vec<PieceInfo>
+    pub pieces_downloaded: Arc<Mutex<Vec<PieceInfo>>>
 }
 
 impl Torrent {
@@ -204,7 +207,7 @@ impl Torrent {
                         data: vec![0u8; info_stuff.piece_length as usize], 
                         status: PieceStatus::NotRequested,
                         length: 0 // to be updated as we learn about the size of this piece (not sure if useful or not but i think it will be)
-                    });
+                    }); // TODO - i think there should maybe be an "amount_downloaded" and "amount_to_download"
                 }
 
                 Ok(
@@ -215,9 +218,10 @@ impl Torrent {
                         announce_path: new_announce_path,
                         scrape_path: new_scrape_path,
                         info_hash,
+                        my_peer_id: rng().random(), // do better?
                         local_addr: SocketAddr::new(torrent.ip, torrent.port),
                         compact: torrent.compact,
-                        pieces_downloaded: pieces_to_download
+                        pieces_downloaded: Arc::new(Mutex::new(pieces_to_download))
                     }
                 )
             },
@@ -253,7 +257,7 @@ pub async fn handle_torrent(
     };
     let request = TrackerRequest {
         info_hash: torrent.info_hash,
-        peer_id: rng().random(),
+        peer_id: torrent.my_peer_id,
         event: Some(TrackerRequestEvent::Started),
         port: torrent.local_addr.port(),
         uploaded: 0,
@@ -289,7 +293,7 @@ pub async fn handle_torrent(
     // talk to peers now
 
     // ok so our torrent has
-    // pub pieces_downloaded: Vec<{Option<Vec<u8>>, PieceStatus, usize}>
+    // pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
     // pub local_addr: SocketAddr,
 
     // and the response has
@@ -362,11 +366,56 @@ pub async fn handle_torrent(
     // we need to respond to requests for things, and/or not based on a "cancel"
     //      we are advised to keep a few (10ish?) unfullfilled requests on each connection??
 
-
-
     // ec: enter endgame mode eventually
     
     // done talking to peers
+
+    log::debug!("Binding listening socket at {}", torrent.local_addr);
+    let listener = TcpListener::bind(torrent.local_addr).await?;
+    log::debug!("Server is listening.");
+
+    // accept incoming connections + process connection inputs/outputs
+    // spawn listening thread? that will constantly loop on things??
+    let listen_handle = tokio::spawn(async move {
+        // keep track of total connections somehow?? so we don't go above 55
+        loop {
+            match listener.accept().await {
+                Ok((stream, addr)) => {
+                    let info_hash = torrent.info_hash.clone();
+                    let peer_id = torrent.my_peer_id.clone();
+                    let pieces = Arc::clone(&torrent.pieces_downloaded);
+                    // is going to need to somehow choose next thing to request (lock on some vec about that?)
+                    // is going to need to somehow update the piece and trigger an audit(?) if the piece is done(?)
+                    // how can we tell - need to save the amount of the piece downloaded somehow
+
+                    tokio::spawn(async move {
+                        handle_incoming_peer(stream, addr, info_hash, peer_id, pieces).await;
+                    });
+                }
+                Err(e) => {
+                    log::error!("Failed to accept incoming connection: {}", e);
+                }
+            }
+        }
+    });
+    
+    // connect to at most 30 peers from the TrackerResponse
+    for peer in response.peers.into_iter().take(30) {
+        let info_hash = torrent.info_hash.clone();
+        let peer_id = torrent.my_peer_id.clone();
+        let pieces = Arc::clone(&torrent.pieces_downloaded);
+        // keep track of total connections somehow?? so we don't go above 55
+        let new_handle = tokio::spawn(async move {
+            match TcpStream::connect(peer.addr).await {
+                Ok(mut stream) => {
+                    handle_outgoing_peer(stream, peer, info_hash, peer_id, pieces).await;
+                }
+                Err(e) => {
+                    log::error!("Failed to connect to {}: {}", peer.addr, e);
+                }
+            }
+        });
+    }
 
     Ok(())
 }
@@ -375,8 +424,14 @@ pub async fn handle_torrent(
 pub struct ConnectedPeer {
     pub addr: SocketAddr,
     pub peer_id: Option<Vec<u8>>,
+    pub stream: TcpStream,
+
     pub am_choking: u8,
     pub am_interested: u8,
     pub peer_choking: u8,
-    pub peer_interested: u8
+    pub peer_interested: u8,
+
+    pub their_bitfield: Vec<u8>,
+    pub upload_rate: f64,
+    pub download_rate: f64
 }
