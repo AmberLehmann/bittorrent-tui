@@ -9,6 +9,7 @@ mod metainfo;
 mod popup;
 mod theme;
 mod torrent;
+// mod torrentcopy; // TEMP
 mod tracker;
 mod tui;
 
