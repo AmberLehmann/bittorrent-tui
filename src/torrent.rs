@@ -182,22 +182,16 @@ impl Torrent {
         }
         log::debug!("new_announce_path: {}", new_announce_path);
         let mut new_scrape_path: Option<String> = None;
-        match new_announce_path.rfind('/') {
-            Some(pos_slash) => {
-                match new_announce_path.get(pos_slash..) {
-                    Some(ann_slice) => {
-                        if ann_slice.starts_with("/announce") {
-                            let before = &new_announce_path[..pos_slash];
-                            let after = &new_announce_path[(pos_slash + 9)..]; // "/announce".len()
-                            let new_scrape_string = format!("{}/scrape{}", before, after);
-                            new_scrape_path = Some(new_scrape_string);
-                        }
-                    },
-                    None => {}
+        if let Some(pos_slash) = new_announce_path.rfind('/') {
+            if let Some(ann_slice) = new_announce_path.get(pos_slash..) {
+                if ann_slice.starts_with("/announce") {
+                    let before = &new_announce_path[..pos_slash];
+                    let after = &new_announce_path[(pos_slash + 9)..]; // "/announce".len()
+                    let new_scrape_string = format!("{}/scrape{}", before, after);
+                    new_scrape_path = Some(new_scrape_string);
                 }
-            },
-            None => {}
-        }
+            }
+        };
         log::debug!("new_scrape_path: {:?}", new_scrape_path);
 
         match &new_meta.info {
