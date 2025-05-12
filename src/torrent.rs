@@ -5,6 +5,7 @@ use crate::{
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20, PeerId20,
 };
+use bytes::Buf;
 use log::info;
 use rand::{random_range, rng, Rng};
 use regex::Regex;
@@ -432,14 +433,12 @@ pub async fn handle_torrent(
         .peers
         .iter()
         .map(|p| {
-            let info_hash = torrent.info_hash.clone();
-            let peer_id = torrent.my_peer_id.clone();
             tokio::spawn(peer_handler(
                 p.addr,
                 torrent.meta_info.info.piece_length(),
                 torrent.pieces_info.clone(),
-                info_hash,
-                peer_id,
+                torrent.info_hash,
+                torrent.my_peer_id,
             ))
         })
         .collect();
@@ -556,7 +555,10 @@ async fn peer_handler(
     let mut interval = tokio::time::interval(tick_rate);
 
     // perform handshake
-    let handshake_msg = Handshake::new(info_hash, peer_id).serialize_handshake();
+    let mut handshake_msg = Handshake::new(info_hash, peer_id).serialize_handshake();
+    while handshake_msg.has_remaining() {
+        stream.write_all_buf(&mut handshake_msg).await?;
+    }
 
     // go into main loop
     loop {
