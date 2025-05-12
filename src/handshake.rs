@@ -8,11 +8,11 @@ pub struct Handshake {
 }
 
 impl Handshake {
-    fn new(&mut self, info_hash: HashedId20, peer_id: PeerId20) -> Self {
+    pub fn new(info_hash: HashedId20, peer_id: PeerId20) -> Self {
         Self { info_hash, peer_id }
     }
 
-    fn serialize_handshake(&self) -> BytesMut {
+    pub fn serialize_handshake(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(68);
         buf.put_u8(19);
         buf.put_slice(b"BitTorrent protocol");

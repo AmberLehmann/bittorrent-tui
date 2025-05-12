@@ -1,4 +1,5 @@
 use crate::{
+    handshake::Handshake,
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
@@ -420,8 +421,6 @@ pub async fn handle_torrent(
     let listener = TcpListener::bind(torrent.local_addr).await?;
     log::debug!("Server is listening.");
 
-    let info_hash_clone = torrent.info_hash.clone();
-    let my_peer_id_clone = torrent.my_peer_id.clone();
     //let pieces_info_arc_clone = Arc::clone(&torrent.pieces_info);
     //let pieces_data_arc_clone = Arc::clone(&torrent.pieces_data);
 
@@ -433,10 +432,14 @@ pub async fn handle_torrent(
         .peers
         .iter()
         .map(|p| {
+            let info_hash = torrent.info_hash.clone();
+            let peer_id = torrent.my_peer_id.clone();
             tokio::spawn(peer_handler(
                 p.addr,
                 torrent.meta_info.info.piece_length(),
                 torrent.pieces_info.clone(),
+                info_hash,
+                peer_id,
             ))
         })
         .collect();
@@ -542,6 +545,8 @@ async fn peer_handler(
     addr: SocketAddr,
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
+    info_hash: HashedId20,
+    peer_id: PeerId20,
 ) -> Result<(), tokio::io::Error> {
     let block_size: usize = 1 << 15;
     let mut stream: TcpStream = TcpStream::connect(addr).await?;
@@ -551,6 +556,7 @@ async fn peer_handler(
     let mut interval = tokio::time::interval(tick_rate);
 
     // perform handshake
+    let handshake_msg = Handshake::new(info_hash, peer_id).serialize_handshake();
 
     // go into main loop
     loop {
@@ -571,7 +577,7 @@ async fn peer_handler(
             },
             _ = delay => {
                 // if we arent currently waiting for a reponse back from our peer and they arent
-                // choking us then claim one of the next rares pieces and request it.
+                // choking us then claim one of the next rarest pieces and request it.
 
                 // set a timer and if the request takes too long or cancle it and update info so
                 // another task has a chance to claim it
