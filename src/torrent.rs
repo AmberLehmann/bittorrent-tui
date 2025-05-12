@@ -5,8 +5,8 @@ use crate::{
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20, PeerId20,
 };
-use bytes::Buf;
-use log::info;
+use bytes::{Buf, BytesMut};
+use log::{debug, error, info};
 use rand::{random_range, rng, Rng};
 use regex::Regex;
 use sha1::{Digest, Sha1};
@@ -426,19 +426,21 @@ pub async fn handle_torrent(
     // accept incoming connections + process connection inputs/outputs
     // spawn listening thread? that will constantly loop on things??
     // keep track of total connections somehow?? so we don't go above 55 TODO
-
+    //
+    let mut handshake_msg =
+        Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
     let peer_handlers: Vec<JoinHandle<_>> = response
         .peers
         .iter()
         .take(30)
         .map(|p| {
+            let msg = handshake_msg.clone();
             tokio::spawn(peer_handler(
                 p.addr,
                 p.peer_id.clone(),
                 torrent.meta_info.info.piece_length(),
                 torrent.pieces_info.clone(),
-                torrent.info_hash,
-                torrent.my_peer_id,
+                msg,
             ))
         })
         .collect();
@@ -545,51 +547,52 @@ async fn peer_handler(
     remote_peer_id: Option<Vec<u8>>,
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
-    info_hash: HashedId20,
-    local_peer_id: PeerId20,
+    mut handshake_msg: BytesMut,
 ) -> Result<(), tokio::io::Error> {
     let block_size: usize = 1 << 15;
     let mut stream: TcpStream = TcpStream::connect(addr).await?;
     let mut stream_buf = Vec::with_capacity(block_size + 50);
     let mut piece_buf: Vec<u8> = Vec::with_capacity(piece_size);
-    let tick_rate = std::time::Duration::from_millis(random_range(30..50));
-    let mut interval = tokio::time::interval(tick_rate);
 
     // perform handshake
-    let mut handshake_msg = Handshake::new(info_hash, local_peer_id).serialize_handshake();
     while handshake_msg.has_remaining() {
         stream.write_all_buf(&mut handshake_msg).await?;
     }
-    handshake_msg.resize(68, 0);
-    log::debug!(
-        "Capacity of buf after writing: {}",
-        handshake_msg.capacity()
-    );
-    stream.read_exact(&mut handshake_msg).await?;
-    log::debug!("Received handshake response!");
+    // handshake_msg.resize(68, 0);
+    let mut response = [0u8; 68];
+    stream.read_exact(&mut response).await?;
+    log::debug!("{:?}", response);
+
     let mut peer_id_response: PeerId20 = [0u8; 20];
-    handshake_msg
-        .split_off(48)
-        .copy_to_slice(&mut peer_id_response);
+    peer_id_response.copy_from_slice(&response[48..68]);
     if let Some(remote_peer_vec) = remote_peer_id {
-        log::trace!("Length of remote peer_id: {}", remote_peer_vec.len());
+        log::debug!("Length of remote peer_id: {}", remote_peer_vec.len());
+        log::debug!("Remote peer_id vec: {:?}", remote_peer_vec);
+        log::debug!("Peer_id response: {:?}", peer_id_response);
         // TODO: Verify peer_id_response
     }
     // Handshake successful, increment number of peers
-
     // go into main loop
+    let tick_rate = std::time::Duration::from_millis(random_range(30..50));
+    let mut interval = tokio::time::interval(tick_rate);
     loop {
         let delay = interval.tick();
         tokio::select! {
             _ = stream.readable() => {
                 // either respond to request or
                 match stream.try_read(&mut stream_buf) {
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {},
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        debug!("would block");
+                        continue;
+                    },
                     Ok(0) => {
                         // stream has likely been closed
+                        debug!("Stream closed");
+                        return Ok(());
                     }
                     Ok(bytes_read) => {
                         // parse and handle message from peer
+                        debug!("bytes read: {}", bytes_read);
                     }
                     Err(e) => Err(e)?,
                 }
@@ -597,9 +600,10 @@ async fn peer_handler(
             _ = delay => {
                 // if we arent currently waiting for a reponse back from our peer and they arent
                 // choking us then claim one of the next rarest pieces and request it.
-
+                debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
                 // another task has a chance to claim it
+                continue;
             },
         }
     }

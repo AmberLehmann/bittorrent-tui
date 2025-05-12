@@ -15,6 +15,7 @@ use std::{
 pub enum TrackerError {
     FailedToDecode(bendy::serde::error::Error),
     Async(tokio::io::Error),
+    JoinTasks(tokio::task::JoinError),
     MultiFile,
     MalformedHttpResponse,
 }
@@ -33,11 +34,18 @@ impl From<tokio::io::Error> for TrackerError {
     }
 }
 
+impl From<tokio::task::JoinError> for TrackerError {
+    fn from(e: tokio::task::JoinError) -> Self {
+        Self::JoinTasks(e)
+    }
+}
+
 impl Display for TrackerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::FailedToDecode(e) => e.fmt(f),
             Self::Async(e) => e.fmt(f),
+            Self::JoinTasks(e) => e.fmt(f),
             Self::MalformedHttpResponse => write!(f, "Invalid http/message split"),
             Self::MultiFile => write!(f, "Multifile mode is currently not supported"),
         }
@@ -92,6 +100,7 @@ impl TrackerRequest {
             buf,
             "GET {}?info_hash={}&peer_id={}",
             &self.announce_path,
+            // "%97%06%d1I%88%dc%d6%a0!%3fU.%7b3%1b%e7%beCo%1b",
             encode_binary(&self.info_hash),
             encode_binary(&self.peer_id)
         )
