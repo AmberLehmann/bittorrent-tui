@@ -3,7 +3,7 @@ use sha1::{Digest, Sha1};
 use std::sync::Arc;
 use tokio::sync::{
     mpsc,
-    mpsc::{UnboundedReceiver, UnboundedSender}
+    mpsc::{UnboundedReceiver, UnboundedSender},
 };
 
 use crate::HashedId20;
