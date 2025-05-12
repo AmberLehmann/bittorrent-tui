@@ -435,6 +435,7 @@ pub async fn handle_torrent(
         .map(|p| {
             tokio::spawn(peer_handler(
                 p.addr,
+                p.peer_id.clone(),
                 torrent.meta_info.info.piece_length(),
                 torrent.pieces_info.clone(),
                 torrent.info_hash,
@@ -542,10 +543,11 @@ pub async fn handle_torrent(
 // the next await is enough?
 async fn peer_handler(
     addr: SocketAddr,
+    remote_peer_id: Option<Vec<u8>>,
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
     info_hash: HashedId20,
-    peer_id: PeerId20,
+    local_peer_id: PeerId20,
 ) -> Result<(), tokio::io::Error> {
     let block_size: usize = 1 << 15;
     let mut stream: TcpStream = TcpStream::connect(addr).await?;
@@ -555,10 +557,26 @@ async fn peer_handler(
     let mut interval = tokio::time::interval(tick_rate);
 
     // perform handshake
-    let mut handshake_msg = Handshake::new(info_hash, peer_id).serialize_handshake();
+    let mut handshake_msg = Handshake::new(info_hash, local_peer_id).serialize_handshake();
     while handshake_msg.has_remaining() {
         stream.write_all_buf(&mut handshake_msg).await?;
     }
+    handshake_msg.resize(68, 0);
+    log::debug!(
+        "Capacity of buf after writing: {}",
+        handshake_msg.capacity()
+    );
+    stream.read_exact(&mut handshake_msg).await?;
+    log::debug!("Received handshake response!");
+    let mut peer_id_response: PeerId20 = [0u8; 20];
+    handshake_msg
+        .split_off(48)
+        .copy_to_slice(&mut peer_id_response);
+    if let Some(remote_peer_vec) = remote_peer_id {
+        log::trace!("Length of remote peer_id: {}", remote_peer_vec.len());
+        // TODO: Verify peer_id_response
+    }
+    // Handshake successful, increment number of peers
 
     // go into main loop
     loop {
