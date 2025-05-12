@@ -9,10 +9,7 @@ pub struct Handshake {
 
 impl Handshake {
     fn new(&mut self, info_hash: HashedId20, peer_id: PeerId20) -> Self {
-        Self {
-            info_hash,
-            peer_id
-        }
+        Self { info_hash, peer_id }
     }
 
     fn serialize_handshake(&self) -> BytesMut {

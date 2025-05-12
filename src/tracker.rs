@@ -148,13 +148,13 @@ pub struct TrackerResponse {
     pub tracker_id: Option<ByteBuf>,
     pub incomplete: u64,
     #[serde(deserialize_with = "deserialize_peers")]
-    pub peers: Vec<PeerInfo>
+    pub peers: Vec<PeerInfo>,
 }
 
 #[derive(Debug)]
 pub struct PeerInfo {
     pub addr: SocketAddr,
-    pub peer_id: Option<Vec<u8>>
+    pub peer_id: Option<Vec<u8>>,
 }
 
 // Custom Deserialization for Peers, should support compact format
@@ -222,7 +222,11 @@ where
                 };
                 peers.push(PeerInfo {
                     addr: SocketAddr::new(ip, port),
-                    peer_id: if peer_id.is_empty() {None} else {Some(peer_id.into_vec())}
+                    peer_id: if peer_id.is_empty() {
+                        None
+                    } else {
+                        Some(peer_id.into_vec())
+                    },
                 });
             }
             log::debug!("peers: {:?}", peers);

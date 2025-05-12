@@ -26,7 +26,7 @@ pub struct File {
 #[derive(Debug, Deserialize, Clone)]
 pub struct MultiFileInfo {
     #[serde(rename = "piece length")]
-    pub piece_length: u32,
+    pub piece_length: u64,
     pub pieces: ByteBuf,
     #[serde(default)]
     pub private: u32,
@@ -42,6 +42,15 @@ pub enum Info {
 
     #[serde(untagged)]
     Multi(MultiFileInfo),
+}
+
+impl Info {
+    pub fn piece_length(&self) -> usize {
+        match self {
+            Info::Single(f) => f.piece_length as usize,
+            Info::Multi(f) => f.piece_length as usize,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
