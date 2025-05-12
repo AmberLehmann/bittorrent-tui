@@ -1,7 +1,39 @@
+use bitvec::order::Msb0;
+use bitvec::prelude::BitVec;
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
+use std::io::{Read, Write, Result, Seek};
 
-#[derive(Debug, PartialEq)]
+pub struct Have { // <len=0005><id=4><piece index>
+    pub piece_index : u32
+}
+
+pub struct Bitfield { // <len=0001+X><id=5><bitfield>
+    pub bitfield : BitVec<u8, Msb0>
+}
+
+pub struct Request { // <len=0013><id=6><index><begin><length>
+    pub index : u32,
+    pub begin : u32,
+    pub length : u32
+}
+
+pub struct Piece { // <len=0009+X><id=7><index><begin><block>
+    pub index : u32,
+    pub begin : u32,
+    pub block : Vec<u8> // TODO - rethink this data type
+}
+
+pub struct Cancel { // <len=0013><id=8><index><begin><length>
+    pub index : u32,
+    pub begin : u32,
+    pub length : u32
+}
+
+pub struct Port { // <len=0003><id=9><listen-port>
+    pub port : u16
+}
+
 pub enum Message {
     KeepAlive, // <len=0000>
     Choke, // <len=0001><id=0>
@@ -17,99 +49,17 @@ pub enum Message {
 }
 
 impl Message {
-    const MSG_TYPE_CHOKE : u8 = 0;
-    const MSG_TYPE_UNCHOKE : u8 = 1;
-    const MSG_TYPE_INTERESTED : u8 = 2;
-    const MSG_TYPE_NOTINTERESTED : u8 = 3;
-    const MSG_TYPE_HAVE : u8 = 4;
-    const MSG_TYPE_BITFIELD : u8 = 5;
-    const MSG_TYPE_REQUEST : u8 = 6;
-    const MSG_TYPE_PIECE : u8 = 7;
-    const MSG_TYPE_CANCEL : u8 = 8;
-    const MSG_TYPE_PORT : u8 = 9;
 
     // <length prefix><message ID><payload>
     // 1. length prefix is a four byte big-endian value
     // 2. message ID is a single decimal byte
     // 3. payload is message dependent
 
-    pub fn parse<T: Read>(mut reader: T) -> io::Result<Self> {
-        let size = reader.read_u32::<NetworkEndian>()?;
-        // let msg_type = reader.read_u8::<NetworkEndian>()?;
-
-        if size == 0 {
-            Message::KeepAlive
-        }
-
-        let reader = &mut reader.take(u64::from(size) - 4);
-
-        match msg_type {
-            Self::DHT_PUT => {
-                // parse DhtPut payload
-                MessagePayload::parse(reader).map(Message::DhtPut)
-            }
-            Self::DHT_GET => {
-                // parse DhtGet payload
-                MessagePayload::parse(reader).map(Message::DhtGet)
-            }
-            Self::DHT_SUCCESS => {
-                // parse DhtSuccess payload
-                MessagePayload::parse(reader).map(Message::DhtSuccess)
-            }
-            Self::DHT_FAILURE => {
-                // parse DhtFailure payload
-                MessagePayload::parse(reader).map(Message::DhtFailure)
-            }
-            Self::STORAGE_GET => {
-                // parse StorageGet payload
-                MessagePayload::parse(reader).map(Message::StorageGet)
-            }
-            Self::STORAGE_PUT => {
-                // parse StoragePut payload
-                MessagePayload::parse(reader).map(Message::StoragePut)
-            }
-            Self::STORAGE_GET_SUCCESS => {
-                // parse StorageGetSuccess payload
-                MessagePayload::parse(reader).map(Message::StorageGetSuccess)
-            }
-            Self::STORAGE_PUT_SUCCESS => {
-                // parse StoragePutSuccess payload
-                MessagePayload::parse(reader).map(Message::StoragePutSuccess)
-            }
-            Self::STORAGE_FAILURE => {
-                // parse StorageFailure payload
-                MessagePayload::parse(reader).map(Message::StorageFailure)
-            }
-            Self::PEER_FIND => {
-                // parse PeerFind payload
-                MessagePayload::parse(reader).map(Message::PeerFind)
-            }
-            Self::PEER_FOUND => {
-                // parse PeerFound payload
-                MessagePayload::parse(reader).map(Message::PeerFound)
-            }
-            Self::PREDECESSOR_NOTIFY => {
-                // parse PredecessorNotify payload
-                MessagePayload::parse(reader).map(Message::PredecessorNotify)
-            }
-            Self::PREDECESSOR_REPLY => {
-                // parse PredecessorReply payload
-                MessagePayload::parse(reader).map(Message::PredecessorReply)
-            }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid message type",
-            )),
-        }
-    }
-
-    pub fn write_to<T: Write + Seek>(&self, mut writer: T) -> io::Result<usize> {
+    pub fn create<T: Write + Seek>(&self, mut writer: T) -> Result<usize> {
         writer.write_u32::<NetworkEndian>(0)?;
 
         match self {
-            Message::KeepAlive => {
-                // do nothing
-            }
+            Message::KeepAlive => {}
             Message::Choke => {
                 writer.write_u8(0)?;
             }
@@ -124,42 +74,133 @@ impl Message {
             }
             Message::Have(substance) => {
                 writer.write_u8(4)?;
-                substance.write_to(&mut writer)?;
+                writer.write_u32::<NetworkEndian>(substance.piece_index)?;
             }
             Message::Bitfield(substance) => {
                 writer.write_u8(5)?;
-                substance.write_to(&mut writer)?;
+                writer.write_all(substance.bitfield.as_raw_slice())?;
             }
             Message::Request(substance) => {
                 writer.write_u8(6)?;
-                substance.write_to(&mut writer)?;
+                writer.write_u32::<NetworkEndian>(substance.index)?;
+                writer.write_u32::<NetworkEndian>(substance.begin)?;
+                writer.write_u32::<NetworkEndian>(substance.length)?;
             }
             Message::Piece(substance) => {
                 writer.write_u8(7)?;
-                substance.write_to(&mut writer)?;
+                writer.write_u32::<NetworkEndian>(substance.index)?;
+                writer.write_u32::<NetworkEndian>(substance.begin)?;
+                writer.write_all(&substance.block)?;
             }
             Message::Cancel(substance) => {
                 writer.write_u8(8)?;
-                substance.write_to(&mut writer)?;
+                writer.write_u32::<NetworkEndian>(substance.index)?;
+                writer.write_u32::<NetworkEndian>(substance.begin)?;
+                writer.write_u32::<NetworkEndian>(substance.length)?;
             }
             Message::Port(substance) => {
                 writer.write_u8(9)?;
-                substance.write_to(&mut writer)?;
+                writer.write_u16::<NetworkEndian>(substance.port)?;
             }
         }
 
-        // write size at beginning of writer
-        let size = writer.seek(io::SeekFrom::Current(4))?;
-
-        writer.seek(io::SeekFrom::Start(0))?;
-        writer.write_u16::<NetworkEndian>(size as u16)?;
+        // write resulting message size to the start
+        let size = writer.seek(io::SeekFrom::Current(0))? - 4; // -4 for length from current pos
+        writer.seek(io::SeekFrom::Start(0))?; // go back to start to write this
+        writer.write_u32::<NetworkEndian>(size as u32)?; // length prefix is a four byte big-endian value
 
         Ok(size as usize)
     }
+
+    pub fn parse<T: Read>(mut reader: T) -> Result<Self> {
+        let size = reader.read_u32::<NetworkEndian>()?;
+
+        if size == 0 {
+            return Ok(Message::KeepAlive);
+        }
+
+        let msg_type = reader.read_u8()?;
+
+        match msg_type {
+            0 => { // choke
+                return Ok(Message::Choke); 
+            }
+            1 => { // unchoke
+                return Ok(Message::UnChoke); 
+            }
+            2 => { // interested
+                return Ok(Message::Interested); 
+            }
+            3 => { // not interested
+                return Ok(Message::NotInterested); 
+            }
+            4 => { // have
+                let piece_index : u32 = reader.read_u32::<NetworkEndian>()?;
+                return Ok(Message::Have(Have {piece_index})); 
+            }
+            5 => { // bitfield
+                // we know 'size' is a u32 representing 1 + X
+                // where X is the number of bytes that makes up this bitfield
+                let mut bitfield_bytes : Vec<u8> = vec![0; (size-1) as usize];
+                reader.read_exact(&mut bitfield_bytes)?;
+                let bitfield = BitVec::<u8, Msb0>::from_vec(bitfield_bytes);
+                return Ok(Message::Bitfield(Bitfield {bitfield})); 
+            }
+            6 => { // request
+                let index : u32 = reader.read_u32::<NetworkEndian>()?;
+                let begin : u32 = reader.read_u32::<NetworkEndian>()?;
+                let length : u32 = reader.read_u32::<NetworkEndian>()?;
+                return Ok(Message::Request(Request {index, begin, length})); 
+            }
+            7 => { // piece
+                let index : u32 = reader.read_u32::<NetworkEndian>()?;
+                let begin : u32 = reader.read_u32::<NetworkEndian>()?;
+                // len is 9 + X
+                let mut block : Vec<u8> = vec![0; (size-9) as usize];
+                reader.read_exact(&mut block)?;
+                return Ok(Message::Piece(Piece {index, begin, block})); 
+            }
+            8 => { // cancel
+                let index : u32 = reader.read_u32::<NetworkEndian>()?;
+                let begin : u32 = reader.read_u32::<NetworkEndian>()?;
+                let length : u32 = reader.read_u32::<NetworkEndian>()?;
+                return Ok(Message::Cancel(Cancel {index, begin, length})); 
+            }
+            9 => { // port
+                return Ok(Message::UnChoke); 
+            }
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid message type",
+            )),
+        }
+    }
+
 }
 
-pub trait MessagePayload: Sized {
-    fn parse(reader: &mut dyn Read) -> io::Result<Self>;
 
-    fn write_to(&self, writer: &mut dyn Write) -> io::Result<()>;
+// NOTE: Use `cargo test -- --show-output`.
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn create_msg_type_piece() {
+        // TODO test
+        // let tr = TrackerRequest {
+        //     info_hash: *b"12345678901234567890",
+        //     peer_id: *b"ABCDEFGHIJKLMNOPQRST",
+        //     event: Some(TrackerRequestEvent::Started),
+        //     port: 8090,
+        //     uploaded: 200,
+        //     downloaded: 200,
+        //     left: 100,
+        //     compact: false,
+        //     no_peer_id: false,
+        //     ip: Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+        //     announce_path: "/announce".to_owned(),
+        //     numwant: Some(2),
+        //     key: Some("secret".into()),
+        //     trackerid: Some("trackster".into()),
+        // };
+        // dbg!(tr.encode_http_get("test".into()));
+    }
 }

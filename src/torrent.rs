@@ -414,8 +414,6 @@ pub async fn handle_torrent(
 
     // ec: enter endgame mode eventually
 
-    // done talking to peers
-
     log::debug!("Binding listening socket at {}", torrent.local_addr);
     let listener = TcpListener::bind(torrent.local_addr).await?;
     log::debug!("Server is listening.");
@@ -432,6 +430,7 @@ pub async fn handle_torrent(
     let peer_handlers: Vec<JoinHandle<_>> = response
         .peers
         .iter()
+        .take(30)
         .map(|p| {
             tokio::spawn(peer_handler(
                 p.addr,
