@@ -9,9 +9,9 @@ mod metainfo;
 mod popup;
 mod theme;
 mod torrent;
-// mod torrentcopy; // TEMP
 mod tracker;
 mod tui;
+mod messages;
 
 pub type PeerId20 = [u8; 20];
 pub type HashedId20 = [u8; 20];
