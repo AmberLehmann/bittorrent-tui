@@ -1,9 +1,11 @@
 use crate::{
+    handshake::Handshake,
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20, PeerId20,
 };
+use bytes::Buf;
 use log::info;
 use rand::{random_range, rng, Rng};
 use regex::Regex;
@@ -418,8 +420,6 @@ pub async fn handle_torrent(
     let listener = TcpListener::bind(torrent.local_addr).await?;
     log::debug!("Server is listening.");
 
-    let info_hash_clone = torrent.info_hash.clone();
-    let my_peer_id_clone = torrent.my_peer_id.clone();
     //let pieces_info_arc_clone = Arc::clone(&torrent.pieces_info);
     //let pieces_data_arc_clone = Arc::clone(&torrent.pieces_data);
 
@@ -434,8 +434,11 @@ pub async fn handle_torrent(
         .map(|p| {
             tokio::spawn(peer_handler(
                 p.addr,
+                p.peer_id.clone(),
                 torrent.meta_info.info.piece_length(),
                 torrent.pieces_info.clone(),
+                torrent.info_hash,
+                torrent.my_peer_id,
             ))
         })
         .collect();
@@ -539,8 +542,11 @@ pub async fn handle_torrent(
 // the next await is enough?
 async fn peer_handler(
     addr: SocketAddr,
+    remote_peer_id: Option<Vec<u8>>,
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
+    info_hash: HashedId20,
+    local_peer_id: PeerId20,
 ) -> Result<(), tokio::io::Error> {
     let block_size: usize = 1 << 15;
     let mut stream: TcpStream = TcpStream::connect(addr).await?;
@@ -550,6 +556,26 @@ async fn peer_handler(
     let mut interval = tokio::time::interval(tick_rate);
 
     // perform handshake
+    let mut handshake_msg = Handshake::new(info_hash, local_peer_id).serialize_handshake();
+    while handshake_msg.has_remaining() {
+        stream.write_all_buf(&mut handshake_msg).await?;
+    }
+    handshake_msg.resize(68, 0);
+    log::debug!(
+        "Capacity of buf after writing: {}",
+        handshake_msg.capacity()
+    );
+    stream.read_exact(&mut handshake_msg).await?;
+    log::debug!("Received handshake response!");
+    let mut peer_id_response: PeerId20 = [0u8; 20];
+    handshake_msg
+        .split_off(48)
+        .copy_to_slice(&mut peer_id_response);
+    if let Some(remote_peer_vec) = remote_peer_id {
+        log::trace!("Length of remote peer_id: {}", remote_peer_vec.len());
+        // TODO: Verify peer_id_response
+    }
+    // Handshake successful, increment number of peers
 
     // go into main loop
     loop {
@@ -570,7 +596,7 @@ async fn peer_handler(
             },
             _ = delay => {
                 // if we arent currently waiting for a reponse back from our peer and they arent
-                // choking us then claim one of the next rares pieces and request it.
+                // choking us then claim one of the next rarest pieces and request it.
 
                 // set a timer and if the request takes too long or cancle it and update info so
                 // another task has a chance to claim it
