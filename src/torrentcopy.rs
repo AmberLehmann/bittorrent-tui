@@ -1,9 +1,8 @@
 use crate::{
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
-    tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
+    tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20,
-    PeerId20
 };
 use log::info;
 use rand::{rng, Rng};
@@ -14,11 +13,10 @@ use std::{
     fs::File,
     io::Read,
     net::{SocketAddr, ToSocketAddrs},
-    sync::{Arc, Mutex}
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpStream, TcpListener},
+    net::TcpStream,
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
 };
 
@@ -99,21 +97,15 @@ pub struct TorrentInfo {
 pub enum PieceStatus {
     NotRequested,
     Requested,
+    NotConfirmed,
     Confirmed
 }
 
 #[derive(Clone)]
 pub struct PieceInfo {
+    data: Vec<u8>,
     status: PieceStatus,
-    needed_requests: Vec<(u32, u32)>,
-    // starts at needed_requests.len(), decrements as we get responses
-    // once it's 0, we need to do the hash check
-    // if hash check succeeds, we can set the piece to Confirmed
-    // if it fails, we can set this back to needed_requests.len()
-    // and the status back to NotRequested
-    requests_left_to_fulfill: usize
-
-    // num_havers: u32 // for rarest-first??
+    length: i64
 }
 
 #[derive(Clone)]
@@ -124,12 +116,10 @@ pub struct Torrent {
     pub scrape_path: Option<String>,
     pub status: TorrentStatus,
     pub info_hash: HashedId20,
-    pub my_peer_id: PeerId20,
     pub compact: bool,
     pub local_addr: SocketAddr,
     // the data in the u8 vec, the status, the length that we know about
-    pub pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
-    pub pieces_data: Arc<Mutex<Vec<Vec<u8>>>>
+    pub pieces_downloaded: Vec<PieceInfo>
 }
 
 impl Torrent {
@@ -206,46 +196,15 @@ impl Torrent {
 
         match &new_meta.info {
             Info::Single(info_stuff) => {
-                // get number of pieces to download 
+                // pieces to download 
                 let num_pieces = (info_stuff.length / info_stuff.piece_length) as usize;
-                
-                let mut pieces_to_download_info = Vec::new();
-                let mut pieces_to_download_data: Vec<Vec<u8>> = Vec::new();
-                for piece_index in 0..num_pieces {
-                    // how long is this piece
-                    let mut this_piece_len = info_stuff.piece_length;
-                    if piece_index == num_pieces - 1 {
-                        this_piece_len = info_stuff.length % info_stuff.piece_length;
-                    }
-                    let this_piece_len = this_piece_len as u32;
-                    // prep spot to put that data
-                    pieces_to_download_data.push(Vec::with_capacity(this_piece_len as usize));
-
-                    // what do we know about this piece
-
-                    // vector of blocks we need to request
-                    // with the offset within the piece
-                    // and the length of the request
-                    // such that each block is 16KB as much as possible
-                    // except the last one which should be "the rest"
-                    let mut this_needed_requests: Vec<(u32, u32)> = Vec::new();
-                    let mut curr_offset: u32 = 0;
-                    let block_size: u32 = 1 << 14; // 2^14 or 16KB
-                    while curr_offset < this_piece_len {
-                        let remaining = this_piece_len - curr_offset;
-                        let block_len = remaining.min(block_size); // smaller of intended block size and the remaining amount
-                        this_needed_requests.push((curr_offset, block_len));
-                        curr_offset += block_len;
-                    }
-                    let this_needed_requests_amount = this_needed_requests.len();
-
-                    pieces_to_download_info.push(PieceInfo{
-                            status: PieceStatus::NotRequested,
-                            needed_requests: this_needed_requests,
-                            requests_left_to_fulfill: this_needed_requests_amount,
-                        }
-                    );
-                    
+                let mut pieces_to_download = Vec::with_capacity(num_pieces);
+                for _ in 0..num_pieces {
+                    pieces_to_download.push(PieceInfo {
+                        data: vec![0u8; info_stuff.piece_length as usize], 
+                        status: PieceStatus::NotRequested,
+                        length: 0 // to be updated as we learn about the size of this piece (not sure if useful or not but i think it will be)
+                    });
                 }
 
                 Ok(
@@ -256,11 +215,9 @@ impl Torrent {
                         announce_path: new_announce_path,
                         scrape_path: new_scrape_path,
                         info_hash,
-                        my_peer_id: rng().random(), // do better?
                         local_addr: SocketAddr::new(torrent.ip, torrent.port),
                         compact: torrent.compact,
-                        pieces_info: Arc::new(Mutex::new(pieces_to_download_info)),
-                        pieces_data: Arc::new(Mutex::new(pieces_to_download_data))
+                        pieces_downloaded: pieces_to_download
                     }
                 )
             },
@@ -296,7 +253,7 @@ pub async fn handle_torrent(
     };
     let request = TrackerRequest {
         info_hash: torrent.info_hash,
-        peer_id: torrent.my_peer_id,
+        peer_id: rng().random(),
         event: Some(TrackerRequestEvent::Started),
         port: torrent.local_addr.port(),
         uploaded: 0,
@@ -332,7 +289,7 @@ pub async fn handle_torrent(
     // talk to peers now
 
     // ok so our torrent has
-    // pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
+    // pub pieces_downloaded: Vec<{Option<Vec<u8>>, PieceStatus, usize}>
     // pub local_addr: SocketAddr,
 
     // and the response has
@@ -405,81 +362,11 @@ pub async fn handle_torrent(
     // we need to respond to requests for things, and/or not based on a "cancel"
     //      we are advised to keep a few (10ish?) unfullfilled requests on each connection??
 
+
+
     // ec: enter endgame mode eventually
     
     // done talking to peers
-
-    log::debug!("Binding listening socket at {}", torrent.local_addr);
-    let listener = TcpListener::bind(torrent.local_addr).await?;
-    log::debug!("Server is listening.");
-
-    let info_hash_clone = torrent.info_hash.clone();
-    let my_peer_id_clone = torrent.my_peer_id.clone();
-    let pieces_info_arc_clone = Arc::clone(&torrent.pieces_info);
-    let pieces_data_arc_clone = Arc::clone(&torrent.pieces_data);
-
-    // accept incoming connections + process connection inputs/outputs
-    // spawn listening thread? that will constantly loop on things??
-    let listen_handle = tokio::spawn(async move {
-        // keep track of total connections somehow?? so we don't go above 55 TODO
-        loop {
-            match listener.accept().await {
-                Ok((stream, addr)) => {
-                    let info_hash = info_hash_clone.clone();
-                    let my_peer_id = my_peer_id_clone.clone();
-                    let pieces_info_arc = Arc::clone(&pieces_info_arc_clone);
-                    let pieces_data_arc = Arc::clone(&pieces_data_arc_clone);
-                    // is going to need to somehow choose next thing to request (lock on some vec about that?)
-                    // is going to need to somehow update the piece and trigger an audit(?) if the piece is done(?)
-                    // how can we tell - need to save the amount of the piece downloaded somehow
-                    // is also going to need to be able to update the connected peer struct for choking and stuff???
-
-                    tokio::spawn(async move {
-                        handle_incoming_peer(stream, addr, info_hash, my_peer_id, pieces_info_arc, pieces_data_arc).await; // receive, kill, etc.
-                    });
-                }
-                Err(e) => {
-                    log::error!("Failed to accept incoming connection: {}", e);
-                }
-            }
-        }
-    });
-
-    let info_hash_clone = torrent.info_hash.clone();
-    let my_peer_id_clone = torrent.my_peer_id.clone();
-    let pieces_info_arc_clone = Arc::clone(&torrent.pieces_info);
-    let pieces_data_arc_clone = Arc::clone(&torrent.pieces_data);
-    
-    // connect to at most 30 peers from the TrackerResponse
-    for peer in response.peers.into_iter().take(30) {
-        let info_hash = info_hash_clone.clone();
-        let my_peer_id = my_peer_id_clone.clone();
-        let pieces_info_arc = Arc::clone(&pieces_info_arc_clone);
-        let pieces_data_arc = Arc::clone(&pieces_data_arc_clone);
-        // keep track of total connections somehow?? so we don't go above 55 TODO
-        let new_handle = tokio::spawn(async move {
-            match TcpStream::connect(peer.addr).await {
-                Ok(mut stream) => {
-                    handle_outgoing_peer(stream, peer, info_hash, my_peer_id, pieces_info_arc, pieces_data_arc).await; // receive, kill, etc.
-                }
-                Err(e) => {
-                    log::error!("Failed to connect to {}: {}", peer.addr, e);
-                }
-            }
-        });
-    }
-    
-    // FUCK will also need to somehow Arc Mutex reference some set of connections
-    // so that we can do shit with unchoking and stuff
-    // i can't do this right now sorry
-
-    // periodic updates to tracker
-    // needs to be its own thread
-    // TODO
-
-    // someone needs to be checking periodically if we are done downloading?? at which point we kill everything and
-    // tell the tracker I guess?
-    // i guess the selection algorithm maybe can do that
 
     Ok(())
 }
@@ -488,36 +375,8 @@ pub async fn handle_torrent(
 pub struct ConnectedPeer {
     pub addr: SocketAddr,
     pub peer_id: Option<Vec<u8>>,
-    pub stream: TcpStream,
-
-    pub am_choking: bool,
-    pub am_interested: bool,
-    pub peer_choking: bool,
-    pub peer_interested: bool,
-
-    pub their_bitfield: Vec<u8>,
-    pub upload_rate: f64,
-    pub download_rate: f64
-}
-
-pub async fn handle_incoming_peer(
-    stream : TcpStream, 
-    addr : SocketAddr, 
-    info_hash : HashedId20, 
-    my_peer_id : PeerId20,
-    pieces_info_arc : Arc<Mutex<Vec<PieceInfo>>>, 
-    pieces_data_arc : Arc<Mutex<Vec<Vec<u8>>>>
-) {
-    todo!();
-}
-
-pub async fn handle_outgoing_peer(
-    stream : TcpStream, 
-    peer : PeerInfo, 
-    info_hash : HashedId20, 
-    my_peer_id : PeerId20,
-    pieces_info_arc : Arc<Mutex<Vec<PieceInfo>>>, 
-    pieces_data_arc : Arc<Mutex<Vec<Vec<u8>>>>
-) {
-    todo!();
+    pub am_choking: u8,
+    pub am_interested: u8,
+    pub peer_choking: u8,
+    pub peer_interested: u8
 }
