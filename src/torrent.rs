@@ -8,7 +8,7 @@ use crate::{
 use bytes::{Buf, BytesMut};
 use futures::stream::FuturesUnordered;
 use log::{debug, error, info};
-use rand::{random_range, rng, Rng};
+use rand::{distr::Alphanumeric, random_range, rng, Rng};
 use regex::Regex;
 use sha1::{Digest, Sha1};
 use std::{
@@ -124,6 +124,20 @@ pub struct PieceInfo {
     status: PieceStatus,
     needed_requests: Vec<BlockInfo>,
     num_havers: u32,
+}
+
+fn generate_peer_id() -> PeerId20 {
+    let prefix = b"-RS1000-";
+    let rand_part: String = rand::rng()
+        .sample_iter(&Alphanumeric)
+        .take(12)
+        .map(char::from)
+        .collect();
+
+    let mut peer_id = [0u8; 20];
+    peer_id[..8].copy_from_slice(prefix);
+    peer_id[8..].copy_from_slice(rand_part.as_bytes());
+    peer_id
 }
 
 #[derive(Clone)]
@@ -267,7 +281,7 @@ impl Torrent {
                     announce_path: new_announce_path,
                     scrape_path: new_scrape_path,
                     info_hash,
-                    my_peer_id: rng().random(), // do better?
+                    my_peer_id: generate_peer_id(), // do better?
                     local_addr: SocketAddr::new(torrent.ip, torrent.port),
                     compact: torrent.compact,
                     pieces_info: Arc::new(Mutex::new(pieces_to_download_info)),

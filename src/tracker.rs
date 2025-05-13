@@ -134,7 +134,7 @@ impl TrackerRequest {
         buf.put_slice(b" HTTP/1.1\r\n");
 
         write!(buf, "Host: {}\r\n", announce).unwrap();
-        buf.put_slice(b"User-Agent: Rusty Client\r\n");
+        buf.put_slice(b"User-Agent: RustTorrent/1.0\r\n");
 
         buf.put_slice(b"Connection: close\r\n");
 
