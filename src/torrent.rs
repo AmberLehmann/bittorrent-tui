@@ -17,6 +17,7 @@ use std::{
     io::Read,
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex},
+    time::Instant,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -518,13 +519,19 @@ async fn peer_handler(
     mut rx: UnboundedReceiver<TcpStream>,
 ) -> Result<(), tokio::io::Error> {
     info!("attempting to contact {addr}");
-    let block_size: usize = 1 << 15; // TODO: ensure is correct
     let mut outgoing_stream: TcpStream = TcpStream::connect(addr).await?;
+    let mut last_response = Instant::now();
+    info!("connected to {addr}");
+
+    let block_size: usize = 1 << 15; // TODO: ensure is correct
     let mut incoming_stream: Option<TcpStream> = None;
     let mut stream_buf = vec![0u8; block_size + 50];
-    let mut piece_buf: Vec<u8> = vec![0u8; piece_size];
 
-    info!("connected to {addr}");
+    // TODO: pull into a struct
+    let mut am_choking = true;
+    let mut peer_choking = true;
+    let mut am_interested = false;
+    let mut peer_interested = false;
 
     // perform handshake
     while handshake_msg.has_remaining() {
@@ -571,9 +578,26 @@ async fn peer_handler(
                         // parse and handle response message from peer
                         debug!("bytes read: {}", bytes_read);
 
-                        let msg = Message::parse(&stream_buf);
+                        let Ok(msg) = Message::parse(&stream_buf) else { continue };
                         debug!("read {msg:?}");
 
+                        // not every message can be recieved from this connection but good to
+                        // include them anyways
+                        match msg {
+                            Message::KeepAlive => last_response = Instant::now(),
+                            Message::Choke => peer_choking = true,
+                            Message::UnChoke => peer_choking = false,
+                            Message::Interested => peer_interested = true,
+                            Message::NotInterested => peer_interested = false,
+                            Message::Have(h) => {},
+                            Message::Bitfield(b) => {},
+                            Message::Request(r) => {},
+                            Message::Piece(p) => {},
+                            Message::Cancel(c) => {},
+                            Message::Port(_p) => {
+                                // we dont support DHT so we can ignore this message
+                            },
+                        }
                     }
                     Err(e) => Err(e)?,
                 }
