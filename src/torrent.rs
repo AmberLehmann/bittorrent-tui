@@ -435,6 +435,7 @@ pub async fn handle_torrent(
         .peers
         .iter()
         .take(30)
+        .filter(|&p| p.addr != torrent.local_addr)
         .map(|p| {
             let msg = handshake_msg.clone();
             let (tx, rx) = unbounded_channel();
