@@ -151,12 +151,14 @@ impl TrackerRequest {
 pub struct TrackerResponse {
     #[serde(rename = "warning message")]
     pub warning_message: Option<ByteBuf>,
+    #[serde(default)]
     pub complete: u64,
     pub interval: u64,
     #[serde(rename = "min interval")]
     pub min_interval: Option<u64>,
     #[serde(rename = "tracker_id")]
     pub tracker_id: Option<ByteBuf>,
+    #[serde(default)]
     pub incomplete: u64,
     #[serde(deserialize_with = "deserialize_peers")]
     pub peers: Vec<PeerInfo>,

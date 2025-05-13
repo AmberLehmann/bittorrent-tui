@@ -317,7 +317,7 @@ pub async fn handle_torrent(
         // ip: Some(local_ipv4), // Temp default to ipv4, give user ability for ipv6
         ip: Some(torrent.local_addr.ip()), // Temp default to ipv4, give user ability for ipv6
         announce_path: torrent.announce_path,
-        numwant: None, // temp default, give user ability to choose
+        numwant: Some(10), // temp default, give user ability to choose
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
@@ -508,8 +508,8 @@ async fn peer_handler(
     let block_size: usize = 1 << 15; // TODO: ensure is correct
     let mut outgoing_stream: TcpStream = TcpStream::connect(addr).await?;
     let mut incoming_stream: Option<TcpStream> = None;
-    let mut stream_buf = Vec::with_capacity(block_size + 50);
-    let mut piece_buf: Vec<u8> = Vec::with_capacity(piece_size);
+    let mut stream_buf = vec![0u8; block_size + 50];
+    let mut piece_buf: Vec<u8> = vec![0u8; piece_size];
 
     info!("connected to {addr}");
 
@@ -520,8 +520,7 @@ async fn peer_handler(
     // handshake_msg.resize(68, 0);
     let mut response = [0u8; 68];
     outgoing_stream.read_exact(&mut response).await?;
-    log::debug!("{:?}", response);
-
+    info!("Received Handshake Response from: {}", addr);
     let mut peer_id_response: PeerId20 = [0u8; 20];
     peer_id_response.copy_from_slice(&response[48..68]);
     if let Some(remote_peer_vec) = remote_peer_id {
@@ -538,6 +537,8 @@ async fn peer_handler(
     // go into main loop
     let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
+    // let interested_msg = [0x00, 0x00, 0x00, 0x01, 0x02];
+    // outgoing_stream.write_all(&interested_msg).await?;
     loop {
         let delay = interval.tick();
         tokio::select! {
@@ -570,7 +571,7 @@ async fn peer_handler(
             _ = delay => {
                 // if we arent currently waiting for a reponse back from our peer and they arent
                 // choking us then claim one of the next rarest pieces and request it.
-                debug!("Delay");
+                // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
                 // another task has a chance to claim it
                 continue;
