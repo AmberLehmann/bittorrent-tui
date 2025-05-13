@@ -526,6 +526,8 @@ async fn peer_handler(
     let block_size: usize = 1 << 15; // TODO: ensure is correct
     let mut incoming_stream: Option<TcpStream> = None;
     let mut stream_buf = vec![0u8; block_size + 50];
+    let piece_size = 1;
+    let mut piece_buf = vec![0u8; piece_size];
 
     // TODO: pull into a struct
     let mut am_choking = true;
@@ -589,10 +591,20 @@ async fn peer_handler(
                             Message::UnChoke => peer_choking = false,
                             Message::Interested => peer_interested = true,
                             Message::NotInterested => peer_interested = false,
-                            Message::Have(h) => {},
-                            Message::Bitfield(b) => {},
-                            Message::Request(r) => {},
-                            Message::Piece(p) => {},
+                            Message::Have(h) => {
+                                // update global torrent piece map
+                            },
+                            Message::Bitfield(b) => {
+                                // update global torrent piece map
+                            },
+                            Message::Request(r) => {
+                                // check if we have the piece then send it if we do and if we arent
+                                // choking this peer
+                            },
+                            Message::Piece(p) => {
+                                piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
+                                // TODO: mark the bounds of this section as being filed
+                            },
                             Message::Cancel(c) => {},
                             Message::Port(_p) => {
                                 // we dont support DHT so we can ignore this message
