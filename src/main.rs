@@ -1,23 +1,22 @@
 use crate::{logger::Logger, tui::App};
-use color_eyre::Result;
 
 mod args;
 mod handshake;
 mod hashing;
 mod logger;
+mod messages;
 mod metainfo;
 mod popup;
 mod theme;
 mod torrent;
 mod tracker;
 mod tui;
-mod messages;
 
 pub type PeerId20 = [u8; 20];
 pub type HashedId20 = [u8; 20];
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), std::io::Error> {
     // let args = Args::parse();
     let mut terminal = ratatui::init();
 

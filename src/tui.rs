@@ -5,7 +5,6 @@ use crate::{
     theme::THEME,
     torrent::{handle_torrent, Torrent, TorrentInfo, TorrentStatus},
 };
-use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use futures::{FutureExt, StreamExt};
 use log::{debug, error, info, trace};
@@ -68,7 +67,7 @@ impl App {
     }
 
     /// runs the application's main loop until the user quits
-    pub async fn run(&mut self, terminal: &mut Tui) -> Result<()> {
+    pub async fn run(&mut self, terminal: &mut Tui) -> Result<(), std::io::Error> {
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
             let event = self.event_handler.next().await?;
@@ -121,7 +120,7 @@ impl App {
     }
 
     /// updates the application's state based on user input
-    fn handle_events(&mut self, event: Event) -> Result<()> {
+    fn handle_events(&mut self, event: Event) -> Result<(), std::io::Error> {
         match event {
             // it's important to check that the event is a key press event as
             // crossterm also emits key release and repeat events on Windows.
@@ -133,7 +132,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
+    fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<(), std::io::Error> {
         if self.save_window.status == PopupStatus::InUse {
             self.save_window.handle_input(key_event.code);
         } else if self.open_window.status == PopupStatus::InUse {
@@ -358,10 +357,7 @@ impl EventHandler {
         }
     }
 
-    pub async fn next(&mut self) -> Result<Event> {
-        self.rx
-            .recv()
-            .await
-            .ok_or(color_eyre::eyre::eyre!("Unable to get event"))
+    pub async fn next(&mut self) -> Result<Event, std::io::Error> {
+        self.rx.recv().await.ok_or(std::io::ErrorKind::Other.into())
     }
 }
