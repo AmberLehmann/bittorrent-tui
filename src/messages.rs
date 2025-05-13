@@ -186,7 +186,11 @@ impl<'a> Message<'a> {
                     length,
                 }))
             }
-            9 => Ok(Message::UnChoke), // port
+            9 => {
+                // port
+                let port: u16 = NetworkEndian::read_u16(&buf[5..7]);
+                Ok(Message::Port(Port { port }))
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Invalid message type",
@@ -201,22 +205,5 @@ mod tests {
     #[test]
     fn create_msg_type_piece() {
         // TODO test
-        // let tr = TrackerRequest {
-        //     info_hash: *b"12345678901234567890",
-        //     peer_id: *b"ABCDEFGHIJKLMNOPQRST",
-        //     event: Some(TrackerRequestEvent::Started),
-        //     port: 8090,
-        //     uploaded: 200,
-        //     downloaded: 200,
-        //     left: 100,
-        //     compact: false,
-        //     no_peer_id: false,
-        //     ip: Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
-        //     announce_path: "/announce".to_owned(),
-        //     numwant: Some(2),
-        //     key: Some("secret".into()),
-        //     trackerid: Some("trackster".into()),
-        // };
-        // dbg!(tr.encode_http_get("test".into()));
     }
 }
