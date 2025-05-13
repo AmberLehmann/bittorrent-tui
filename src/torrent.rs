@@ -1,5 +1,6 @@
 use crate::{
     handshake::Handshake,
+    messages::Message,
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
@@ -571,6 +572,10 @@ async fn peer_handler(
                     Ok(bytes_read) => {
                         // parse and handle response message from peer
                         debug!("bytes read: {}", bytes_read);
+
+                        let msg = Message::parse(&stream_buf);
+                        debug!("read {msg:?}");
+
                     }
                     Err(e) => Err(e)?,
                 }
