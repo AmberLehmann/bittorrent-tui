@@ -102,7 +102,7 @@ impl<'a> Message<'a> {
                 writer.write_u8(7)?;
                 writer.write_u32::<NetworkEndian>(substance.index)?;
                 writer.write_u32::<NetworkEndian>(substance.begin)?;
-                writer.write_all(&substance.block)?;
+                writer.write_all(substance.block)?;
             }
             Message::Cancel(substance) => {
                 writer.write_u8(8)?;
@@ -117,7 +117,7 @@ impl<'a> Message<'a> {
         }
 
         // write resulting message size to the start
-        let size = writer.seek(io::SeekFrom::Current(0))? - 4; // -4 for length from current pos
+        let size = writer.stream_position()? - 4; // -4 for length from current pos
         writer.seek(io::SeekFrom::Start(0))?; // go back to start to write this
         writer.write_u32::<NetworkEndian>(size as u32)?; // length prefix is a four byte big-endian value
 
@@ -134,26 +134,14 @@ impl<'a> Message<'a> {
         let msg_type = buf[4];
 
         match msg_type {
-            0 => {
-                // choke
-                return Ok(Message::Choke);
-            }
-            1 => {
-                // unchoke
-                return Ok(Message::UnChoke);
-            }
-            2 => {
-                // interested
-                return Ok(Message::Interested);
-            }
-            3 => {
-                // not interested
-                return Ok(Message::NotInterested);
-            }
+            0 => Ok(Message::Choke),         // choke
+            1 => Ok(Message::UnChoke),       // unchoke
+            2 => Ok(Message::Interested),    // interested
+            3 => Ok(Message::NotInterested), // not interested
             4 => {
                 // have
                 let piece_index: u32 = NetworkEndian::read_u32(&buf[5..9]);
-                return Ok(Message::Have(Have { piece_index }));
+                Ok(Message::Have(Have { piece_index }))
             }
             5 => {
                 // bitfield
@@ -161,18 +149,18 @@ impl<'a> Message<'a> {
                 // where X is the number of bytes that makes up this bitfield
                 let bitfield: &BitSlice<u8, Msb0> =
                     buf[5..5 + size as usize - 1].view_bits::<Msb0>();
-                return Ok(Message::Bitfield(Bitfield { bitfield }));
+                Ok(Message::Bitfield(Bitfield { bitfield }))
             }
             6 => {
                 // request
                 let index: u32 = NetworkEndian::read_u32(&buf[5..9]);
                 let begin: u32 = NetworkEndian::read_u32(&buf[9..13]);
                 let length: u32 = NetworkEndian::read_u32(&buf[13..17]);
-                return Ok(Message::Request(Request {
+                Ok(Message::Request(Request {
                     index,
                     begin,
                     length,
-                }));
+                }))
             }
             7 => {
                 // piece
@@ -181,27 +169,24 @@ impl<'a> Message<'a> {
                 // len is 9 + X
                 let len = size as usize - 9;
                 //reader.read_exact(&mut block)?;
-                return Ok(Message::Piece(Piece {
+                Ok(Message::Piece(Piece {
                     index,
                     begin,
                     block: &buf[13..13 + len],
-                }));
+                }))
             }
             8 => {
                 // cancel
                 let index: u32 = NetworkEndian::read_u32(&buf[5..9]);
                 let begin: u32 = NetworkEndian::read_u32(&buf[9..13]);
                 let length: u32 = NetworkEndian::read_u32(&buf[13..17]);
-                return Ok(Message::Cancel(Cancel {
+                Ok(Message::Cancel(Cancel {
                     index,
                     begin,
                     length,
-                }));
+                }))
             }
-            9 => {
-                // port
-                return Ok(Message::UnChoke);
-            }
+            9 => Ok(Message::UnChoke), // port
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Invalid message type",
@@ -235,4 +220,3 @@ mod tests {
         // dbg!(tr.encode_http_get("test".into()));
     }
 }
-

@@ -7,9 +7,8 @@ use crate::{
     HashedId20, PeerId20,
 };
 use bytes::{Buf, BytesMut};
-use futures::stream::FuturesUnordered;
 use log::{debug, error, info};
-use rand::{distr::Alphanumeric, random_range, rng, Rng};
+use rand::{distr::Alphanumeric, random_range, Rng};
 use regex::Regex;
 use sha1::{Digest, Sha1};
 use std::{
@@ -444,8 +443,7 @@ pub async fn handle_torrent(
     // keep track of total connections somehow?? so we don't go above 55 TODO
 
     let (torrent_tx, peer_rx) = unbounded_channel();
-    let mut handshake_msg =
-        Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
+    let handshake_msg = Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
     let peer_handlers: Vec<(JoinHandle<_>, UnboundedSender<TcpStream>)> = response
         .peers
         .iter()
@@ -542,7 +540,7 @@ async fn peer_handler(
         log::debug!("Length of remote peer_id: {}", remote_peer_vec.len());
         log::debug!("Remote peer_id vec: {:?}", remote_peer_vec);
         log::debug!("Peer_id response: {:?}", peer_id_response);
-        if remote_peer_vec != &peer_id_response {
+        if remote_peer_vec != peer_id_response {
             error!("Peer ID not matching in dictionary format!");
         }
         // TODO: Verify peer_id_response
