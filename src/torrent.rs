@@ -6,6 +6,7 @@ use crate::{
     HashedId20, PeerId20,
 };
 use bytes::{Buf, BytesMut};
+use futures::stream::FuturesUnordered;
 use log::{debug, error, info};
 use rand::{random_range, rng, Rng};
 use regex::Regex;
@@ -20,7 +21,7 @@ use std::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::mpsc::{UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
 
@@ -426,22 +427,29 @@ pub async fn handle_torrent(
     // accept incoming connections + process connection inputs/outputs
     // spawn listening thread? that will constantly loop on things??
     // keep track of total connections somehow?? so we don't go above 55 TODO
-    //
+
+    let (torrent_tx, peer_rx) = unbounded_channel();
     let mut handshake_msg =
         Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
-    let peer_handlers: Vec<JoinHandle<_>> = response
+    let peer_handlers: Vec<(JoinHandle<_>, UnboundedSender<TcpStream>)> = response
         .peers
         .iter()
         .take(30)
         .map(|p| {
             let msg = handshake_msg.clone();
-            tokio::spawn(peer_handler(
-                p.addr,
-                p.peer_id.clone(),
-                torrent.meta_info.info.piece_length(),
-                torrent.pieces_info.clone(),
-                msg,
-            ))
+            let (tx, rx) = unbounded_channel();
+            (
+                tokio::spawn(peer_handler(
+                    p.addr,
+                    p.peer_id.clone(),
+                    torrent.meta_info.info.piece_length(),
+                    torrent.pieces_info.clone(),
+                    msg,
+                    torrent_tx.clone(),
+                    rx,
+                )),
+                tx,
+            )
         })
         .collect();
 
@@ -462,67 +470,6 @@ pub async fn handle_torrent(
             },
         }
     }
-
-    //    match listener.accept().await {
-    //        Ok((stream, addr)) => {
-    //            let info_hash = info_hash_clone.clone();
-    //            let my_peer_id = my_peer_id_clone.clone();
-    //            let pieces_info_arc = Arc::clone(&pieces_info_arc_clone);
-    //            let pieces_data_arc = Arc::clone(&pieces_data_arc_clone);
-    //            // is going to need to somehow choose next thing to request (lock on some vec about that?)
-    //            // is going to need to somehow update the piece and trigger an audit(?) if the piece is done(?)
-    //            // how can we tell - need to save the amount of the piece downloaded somehow
-    //            // is also going to need to be able to update the connected peer struct for choking and stuff???
-    //
-    //            tokio::spawn(async move {
-    //                handle_incoming_peer(
-    //                    stream,
-    //                    addr,
-    //                    info_hash,
-    //                    my_peer_id,
-    //                    pieces_info_arc,
-    //                    pieces_data_arc,
-    //                )
-    //                .await; // receive, kill, etc.
-    //            });
-    //        }
-    //        Err(e) => {
-    //            log::error!("Failed to accept incoming connection: {}", e);
-    //        }
-    //    }
-    //}
-
-    //let info_hash_clone = torrent.info_hash.clone();
-    //let my_peer_id_clone = torrent.my_peer_id.clone();
-    //let pieces_info_arc_clone = Arc::clone(&torrent.pieces_info);
-    //let pieces_data_arc_clone = Arc::clone(&torrent.pieces_data);
-    //
-    //// connect to at most 30 peers from the TrackerResponse
-    //for peer in response.peers.into_iter().take(30) {
-    //    let info_hash = info_hash_clone.clone();
-    //    let my_peer_id = my_peer_id_clone.clone();
-    //    let pieces_info_arc = Arc::clone(&pieces_info_arc_clone);
-    //    let pieces_data_arc = Arc::clone(&pieces_data_arc_clone);
-    //    // keep track of total connections somehow?? so we don't go above 55 TODO
-    //    let new_handle = tokio::spawn(async move {
-    //        match TcpStream::connect(peer.addr).await {
-    //            Ok(mut stream) => {
-    //                handle_outgoing_peer(
-    //                    stream,
-    //                    peer,
-    //                    info_hash,
-    //                    my_peer_id,
-    //                    pieces_info_arc,
-    //                    pieces_data_arc,
-    //                )
-    //                .await; // receive, kill, etc.
-    //            }
-    //            Err(e) => {
-    //                log::error!("Failed to connect to {}: {}", peer.addr, e);
-    //            }
-    //        }
-    //    });
-    //}
 
     // FUCK will also need to somehow Arc Mutex reference some set of connections
     // so that we can do shit with unchoking and stuff
@@ -548,19 +495,25 @@ async fn peer_handler(
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
     mut handshake_msg: BytesMut,
+    tx: UnboundedSender<()>,
+    mut rx: UnboundedReceiver<TcpStream>,
 ) -> Result<(), tokio::io::Error> {
-    let block_size: usize = 1 << 15;
-    let mut stream: TcpStream = TcpStream::connect(addr).await?;
+    info!("attempting to contact {addr}");
+    let block_size: usize = 1 << 15; // TODO: ensure is correct
+    let mut outgoing_stream: TcpStream = TcpStream::connect(addr).await?;
+    let mut incoming_stream: Option<TcpStream> = None;
     let mut stream_buf = Vec::with_capacity(block_size + 50);
     let mut piece_buf: Vec<u8> = Vec::with_capacity(piece_size);
 
+    info!("connected to {addr}");
+
     // perform handshake
     while handshake_msg.has_remaining() {
-        stream.write_all_buf(&mut handshake_msg).await?;
+        outgoing_stream.write_all_buf(&mut handshake_msg).await?;
     }
     // handshake_msg.resize(68, 0);
     let mut response = [0u8; 68];
-    stream.read_exact(&mut response).await?;
+    outgoing_stream.read_exact(&mut response).await?;
     log::debug!("{:?}", response);
 
     let mut peer_id_response: PeerId20 = [0u8; 20];
@@ -571,6 +524,7 @@ async fn peer_handler(
         log::debug!("Peer_id response: {:?}", peer_id_response);
         // TODO: Verify peer_id_response
     }
+
     // Handshake successful, increment number of peers
     // go into main loop
     let tick_rate = std::time::Duration::from_millis(random_range(30..50));
@@ -578,9 +532,9 @@ async fn peer_handler(
     loop {
         let delay = interval.tick();
         tokio::select! {
-            _ = stream.readable() => {
+            _ = outgoing_stream.readable() => {
                 // either respond to request or
-                match stream.try_read(&mut stream_buf) {
+                match outgoing_stream.try_read(&mut stream_buf) {
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         debug!("would block");
                         continue;
@@ -591,12 +545,19 @@ async fn peer_handler(
                         return Ok(());
                     }
                     Ok(bytes_read) => {
-                        // parse and handle message from peer
+                        // parse and handle response message from peer
                         debug!("bytes read: {}", bytes_read);
                     }
                     Err(e) => Err(e)?,
                 }
             },
+            Some(new_peer) = rx.recv() => {
+                incoming_stream = Some(new_peer);
+            }
+            Some(_) = readable_tcpstream(&incoming_stream) => {
+                let Some(ref s) = incoming_stream else { continue };
+                // our peer is making a request or sending an update
+            }
             _ = delay => {
                 // if we arent currently waiting for a reponse back from our peer and they arent
                 // choking us then claim one of the next rarest pieces and request it.
@@ -606,6 +567,13 @@ async fn peer_handler(
                 continue;
             },
         }
+    }
+}
+
+async fn readable_tcpstream(stream: &Option<TcpStream>) -> Option<()> {
+    match stream {
+        Some(s) => s.readable().await.ok(),
+        None => None,
     }
 }
 
