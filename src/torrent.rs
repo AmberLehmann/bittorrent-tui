@@ -127,7 +127,7 @@ pub struct PieceInfo {
 }
 
 fn generate_peer_id() -> PeerId20 {
-    let prefix = b"-RS1000-";
+    let prefix = b"AmogusBT";
     let rand_part: String = rand::rng()
         .sample_iter(&Alphanumeric)
         .take(12)
