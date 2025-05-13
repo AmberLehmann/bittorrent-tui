@@ -317,7 +317,7 @@ pub async fn handle_torrent(
         // ip: Some(local_ipv4), // Temp default to ipv4, give user ability for ipv6
         ip: Some(torrent.local_addr.ip()), // Temp default to ipv4, give user ability for ipv6
         announce_path: torrent.announce_path,
-        numwant: Some(10), // temp default, give user ability to choose
+        numwant: None, // temp default, give user ability to choose
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
