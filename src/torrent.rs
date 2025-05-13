@@ -465,6 +465,11 @@ pub async fn handle_torrent(
                     _ => {},
                 }
             },
+            Ok((peer_stream, peer_addr)) = listener.accept() => {
+                // a peer is trying to connect to us
+                info!("{peer_addr} attempting to connect");
+
+            },
             _ = delay => {
                 // send periodic update to tracker
             },
@@ -527,7 +532,7 @@ async fn peer_handler(
 
     // Handshake successful, increment number of peers
     // go into main loop
-    let tick_rate = std::time::Duration::from_millis(random_range(30..50));
+    let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
     loop {
         let delay = interval.tick();
