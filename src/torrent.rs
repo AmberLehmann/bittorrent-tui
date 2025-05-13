@@ -528,6 +528,9 @@ async fn peer_handler(
         log::debug!("Length of remote peer_id: {}", remote_peer_vec.len());
         log::debug!("Remote peer_id vec: {:?}", remote_peer_vec);
         log::debug!("Peer_id response: {:?}", peer_id_response);
+        if remote_peer_vec != &peer_id_response {
+            error!("Peer ID not matching in dictionary format!");
+        }
         // TODO: Verify peer_id_response
     }
 
