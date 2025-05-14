@@ -359,7 +359,7 @@ pub async fn handle_torrent(
     // Start listening
 
     // to prevent duplicate connections if we can
-    let known_peers = Arc::new(RwLock::new(HashMap::<PeerId20, SocketAddr>::new()));
+    let known_peers = Arc::new(Mutex::new(HashMap::<PeerId20, SocketAddr>::new()));
 
     log::debug!("Binding listening socket at {}", torrent.local_addr);
     let listener = TcpListener::bind(torrent.local_addr).await?;
@@ -485,7 +485,7 @@ async fn peer_handler(
     mut handshake_msg: BytesMut,
     tx: UnboundedSender<PeerMsg>,
     mut rx: UnboundedReceiver<TcpStream>,
-    known_peers: Arc<RwLock<HashMap<PeerId20, SocketAddr>>>,
+    known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
     is_outgoing: bool,
     existing_stream: Option<TcpStream>
 ) -> Result<(), tokio::io::Error> {
@@ -658,7 +658,7 @@ async fn do_incoming_handshake(
     info_hash: HashedId20,
     peer_id: Option<PeerId20>,
     handshake_msg: BytesMut,
-    known_peers: Arc<RwLock<HashMap<PeerId20, SocketAddr>>>,
+    known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
 ) -> Result<(), DoHandshakeError> {
     debug!("Handling an incoming handshake from {}", peer_addr);
     // do that
@@ -713,7 +713,7 @@ async fn do_incoming_handshake(
     debug!("Got peer_id from {}", peer_addr);
 
     // make sure no duplicate connections
-    match known_peers.write() {
+    match known_peers.lock() {
         Err(e) => {
             error!("Could not get lock on known_peers: {e}");
             return Err(DoHandshakeError::FailedLock);
@@ -739,7 +739,7 @@ async fn do_outgoing_handshake(
     info_hash: HashedId20,
     peer_id: Option<PeerId20>,
     mut handshake_msg: BytesMut,
-    known_peers: Arc<RwLock<HashMap<PeerId20, SocketAddr>>>,
+    known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
 ) -> Result<(), DoHandshakeError> {
     debug!("Handling an outgoing handshake to {}", peer_addr);
     // do that
@@ -792,7 +792,7 @@ async fn do_outgoing_handshake(
     }
 
     // make sure no duplicate connections
-    match known_peers.write() {
+    match known_peers.lock() {
         Err(e) => {
             error!("Could not get read lock on known_peers: {e}");
             return Err(DoHandshakeError::FailedLock);
