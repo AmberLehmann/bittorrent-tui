@@ -424,6 +424,7 @@ pub async fn handle_torrent(
                 buf.clear();
             },
             Ok((peer_stream, peer_addr)) = listener.accept() => {
+
                 // a peer is trying to connect to us
                 info!("{peer_addr} attempting to connect");
 
@@ -649,7 +650,8 @@ pub enum DoHandshakeError {
     BadPeerId,
     DuplicatePeerId,
     BadHashId,
-    FailedLock
+    FailedLock,
+    TooManyPeers
 }
 
 async fn do_incoming_handshake(
@@ -723,6 +725,10 @@ async fn do_incoming_handshake(
                 debug!("Already connected to id={:?}, {}", &their_id, peer_addr);
                 drop(known_peers_writer);
                 return Err(DoHandshakeError::DuplicatePeerId);
+            } else if known_peers_writer.len() >= 55 {
+                debug!("Already connected to 55 peers, {}", peer_addr);
+                drop(known_peers_writer);
+                return Err(DoHandshakeError::TooManyPeers);
             }
             debug!("This peer id={:?} was not a known peer {}", &their_id, peer_addr);
             known_peers_writer.insert(their_id, peer_addr);
