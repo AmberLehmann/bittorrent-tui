@@ -348,7 +348,7 @@ pub async fn handle_torrent(
     info!("Sent initial request to tracker.");
     let mut buf: Vec<u8> = vec![];
     tracker_stream.read_to_end(&mut buf).await?;
-    let response = TrackerResponse::new(&mut buf)?;
+    let mut response = TrackerResponse::new(&mut buf)?;
 
     // ok so our torrent has
     // pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
@@ -465,7 +465,7 @@ pub async fn handle_torrent(
 
     let tick_rate = std::time::Duration::from_millis(50);
     let mut interval = tokio::time::interval(tick_rate);
-    let mut last_response = Instant::now();
+    let mut last_request = Instant::now();
     let mut buf = BytesMut::with_capacity(1024);
     loop {
         let delay = interval.tick();
@@ -477,8 +477,8 @@ pub async fn handle_torrent(
                         // error!("Tracker closed connection!");
                     },
                     Ok(bytes_read) => {
-                        let response = TrackerResponse::new(&mut buf);
-
+                        response = TrackerResponse::new(&mut buf)?;
+                        // Potentially assigned new trackers, want to update!
                         continue;
                     },
                     Err(e) => Err(e)?,
@@ -492,13 +492,12 @@ pub async fn handle_torrent(
 
             },
             _ = delay => {
-                last_response = Instant::now();
                 // request.gen_periodic_req(uploaded, downloaded, left);
-
-                let mut http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
-                let bytes = tracker_stream.write(&http_msg).await?; // NOTE: Causes Pipe Error (BAD)
-                debug!("Printed {bytes} in periodic update to tracker");
-
+                if last_request.elapsed() > std::time::Duration::from_secs(response.interval) {
+                    last_request = Instant::now();
+                    let mut http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
+                    tracker_stream.write_all_buf(&mut http_msg).await?; // NOTE: Causes Pipe Error (BAD)
+                }
                 // send periodic update to tracker
             },
         }
