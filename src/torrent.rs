@@ -16,7 +16,7 @@ use std::{
     fs::File,
     io::Read,
     net::{SocketAddr, ToSocketAddrs},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::Instant,
 };
 use tokio::{
@@ -154,7 +154,7 @@ pub struct Torrent {
     pub local_addr: SocketAddr,
     // the data in the u8 vec, the status, the length that we know about
     pub pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
-    pub pieces_data: Arc<Mutex<Vec<Vec<u8>>>>,
+    pub pieces_data: Arc<Vec<RwLock<Vec<u8>>>>,
 }
 
 impl Torrent {
@@ -459,6 +459,7 @@ pub async fn handle_torrent(
                     p.peer_id.clone(),
                     torrent.meta_info.info.piece_length(),
                     torrent.pieces_info.clone(),
+                    torrent.pieces_data.clone(),
                     msg,
                     torrent_tx.clone(),
                     rx,
@@ -514,6 +515,7 @@ async fn peer_handler(
     remote_peer_id: Option<Vec<u8>>,
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
+    pieces_data: Arc<Vec<RwLock<Vec<u8>>>>,
     mut handshake_msg: BytesMut,
     tx: UnboundedSender<()>,
     mut rx: UnboundedReceiver<TcpStream>,
