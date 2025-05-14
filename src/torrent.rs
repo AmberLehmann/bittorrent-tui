@@ -380,10 +380,27 @@ pub async fn handle_torrent(
             let msg = handshake_msg.clone();
             let (tx, rx) = unbounded_channel();
             let known_peers_clone = Arc::clone(&known_peers);
+            let real_peer_id: Option<PeerId20> = match &p.peer_id {
+                Some(bytes) if bytes.len() == 20 => {
+                    let slice: &[u8] = bytes.as_ref();
+                    Some(slice.try_into().expect("length checked above"))
+                },
+                Some(bytes) if bytes.len() == 0 => {
+                    None
+                },
+                Some(bytes) => {
+                    error!("Ignoring peer_id with invalid length: {} (expected 20)", bytes.len());
+                    None
+                    // TODO - do not connect to this peer!!!
+                },
+                None => {
+                    None
+                }
+            };
             (
                 tokio::spawn(peer_handler(
                     p.addr,
-                    p.peer_id,
+                    real_peer_id,
                     torrent.info_hash,
                     torrent.meta_info.info.piece_length(),
                     torrent.pieces_info.clone(),
