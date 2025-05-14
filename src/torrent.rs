@@ -513,7 +513,7 @@ pub async fn handle_torrent(
 // the next await is enough?
 async fn peer_handler(
     addr: SocketAddr,
-    remote_peer_id: Option<Vec<u8>>,
+    peer_id: Option<Vec<u8>>,
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
     pieces_data: Arc<Vec<RwLock<Vec<u8>>>>,
@@ -521,34 +521,38 @@ async fn peer_handler(
     tx: UnboundedSender<()>,
     mut rx: UnboundedReceiver<TcpStream>,
 ) -> Result<(), tokio::io::Error> {
-    info!("attempting to contact {addr}");
-    let mut outgoing_stream: TcpStream = TcpStream::connect(addr).await?;
+    let mut peer = ConnectedPeer {
+        addr,
+        id: peer_id,
+        out_stream: TcpStream::connect(addr).await?,
+        in_stream: None,
+        am_choking: true,
+        peer_choking: true,
+        am_interested: false,
+        peer_interested: false,
+        bitfield: Vec::new(),
+        upload_rate: 0.0,
+        download_rate: 0.0,
+    };
     let mut last_response = Instant::now();
     info!("connected to {addr}");
 
     let block_size: usize = 1 << 15; // TODO: ensure is correct
     let mut incoming_stream: Option<TcpStream> = None;
     let mut stream_buf = vec![0u8; block_size + 50];
-    let piece_size = 1;
     let mut piece_buf = vec![0u8; piece_size];
-
-    // TODO: pull into a struct
-    let mut am_choking = true;
-    let mut peer_choking = true;
-    let mut am_interested = false;
-    let mut peer_interested = false;
 
     // perform handshake
     while handshake_msg.has_remaining() {
-        outgoing_stream.write_all_buf(&mut handshake_msg).await?;
+        peer.out_stream.write_all_buf(&mut handshake_msg).await?;
     }
     // handshake_msg.resize(68, 0);
     let mut response = [0u8; 68];
-    outgoing_stream.read_exact(&mut response).await?;
+    peer.out_stream.read_exact(&mut response).await?;
     info!("Received Handshake Response from: {}", addr);
     let mut peer_id_response: PeerId20 = [0u8; 20];
     peer_id_response.copy_from_slice(&response[48..68]);
-    if let Some(remote_peer_vec) = remote_peer_id {
+    if let Some(remote_peer_vec) = peer.id {
         log::debug!("Length of remote peer_id: {}", remote_peer_vec.len());
         log::debug!("Remote peer_id vec: {:?}", remote_peer_vec);
         log::debug!("Peer_id response: {:?}", peer_id_response);
@@ -567,9 +571,9 @@ async fn peer_handler(
     loop {
         let delay = interval.tick();
         tokio::select! {
-            _ = outgoing_stream.readable() => {
+            _ = peer.out_stream.readable() => {
                 // either respond to request or
-                match outgoing_stream.try_read(&mut stream_buf) {
+                match peer.out_stream.try_read(&mut stream_buf) {
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         debug!("would block");
                         continue;
@@ -581,8 +585,6 @@ async fn peer_handler(
                     }
                     Ok(bytes_read) => {
                         // parse and handle response message from peer
-                        debug!("bytes read: {}", bytes_read);
-
                         let Ok(msg) = Message::parse(&stream_buf) else { continue };
                         debug!("read {msg:?}");
 
@@ -590,10 +592,10 @@ async fn peer_handler(
                         // include them anyways
                         match msg {
                             Message::KeepAlive => last_response = Instant::now(),
-                            Message::Choke => peer_choking = true,
-                            Message::UnChoke => peer_choking = false,
-                            Message::Interested => peer_interested = true,
-                            Message::NotInterested => peer_interested = false,
+                            Message::Choke => peer.peer_choking = true,
+                            Message::UnChoke => peer.peer_choking = false,
+                            Message::Interested => peer.peer_interested = true,
+                            Message::NotInterested => peer.peer_interested = false,
                             Message::Have(h) => {
                                 // update global torrent piece map
                             },
@@ -646,37 +648,16 @@ async fn readable_tcpstream(stream: &Option<TcpStream>) -> Option<()> {
 #[derive(Debug)]
 pub struct ConnectedPeer {
     pub addr: SocketAddr,
-    pub peer_id: Option<Vec<u8>>,
-    pub stream: TcpStream,
+    pub id: Option<Vec<u8>>,
+    pub out_stream: TcpStream,
+    pub in_stream: Option<TcpStream>,
 
     pub am_choking: bool,
     pub am_interested: bool,
     pub peer_choking: bool,
     pub peer_interested: bool,
 
-    pub their_bitfield: Vec<u8>,
+    pub bitfield: Vec<u8>,
     pub upload_rate: f64,
     pub download_rate: f64,
-}
-
-pub async fn handle_incoming_peer(
-    stream: TcpStream,
-    addr: SocketAddr,
-    info_hash: HashedId20,
-    my_peer_id: PeerId20,
-    pieces_info_arc: Arc<Mutex<Vec<PieceInfo>>>,
-    pieces_data_arc: Arc<Mutex<Vec<Vec<u8>>>>,
-) {
-    todo!();
-}
-
-pub async fn handle_outgoing_peer(
-    stream: TcpStream,
-    peer: PeerInfo,
-    info_hash: HashedId20,
-    my_peer_id: PeerId20,
-    pieces_info_arc: Arc<Mutex<Vec<PieceInfo>>>,
-    pieces_data_arc: Arc<Mutex<Vec<Vec<u8>>>>,
-) {
-    todo!();
 }
