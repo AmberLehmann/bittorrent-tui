@@ -182,7 +182,7 @@ impl TrackerResponse {
 #[derive(Debug)]
 pub struct PeerInfo {
     pub addr: SocketAddr,
-    pub peer_id: Option<PeerId20>,
+    pub peer_id: Option<ByteBuf>,
 }
 
 // Custom Deserialization for Peers, should support compact format
@@ -236,7 +236,7 @@ where
                 port: u16,
                 #[serde(rename = "peer id")]
                 #[serde(default)]
-                peer_id: PeerId20,
+                peer_id: ByteBuf,
             }
             // size_hint() gets the size if included in the SeqAccess
             let mut peers = Vec::with_capacity(seq.size_hint().unwrap_or(0));
