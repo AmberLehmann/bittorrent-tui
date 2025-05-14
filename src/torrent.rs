@@ -1,6 +1,6 @@
 use crate::{
     handshake::Handshake,
-    messages::Message,
+    messages::{self, Message},
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
@@ -14,7 +14,7 @@ use bitvec::{
 use byteorder::{ByteOrder, NetworkEndian};
 use bytes::{Buf, BytesMut};
 use log::{debug, error, info};
-use rand::{distr::Alphanumeric, random_range, Rng};
+use rand::{distr::Alphanumeric, random_range, seq::IteratorRandom, Rng};
 use regex::Regex;
 use sha1::{Digest, Sha1};
 use std::{
@@ -108,7 +108,7 @@ pub struct TorrentInfo {
     pub speed: u64,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum PieceStatus {
     NotRequested,
     Requested,
@@ -527,6 +527,7 @@ async fn peer_handler(
     let mut len_buf = [0u8; 4];
     let mut stream_buf = vec![0u8; block_size + 50];
     let mut piece_buf = vec![0u8; piece_size];
+    let mut waiting = false;
 
     if is_outgoing {
         if let Err(e) = do_outgoing_handshake(&mut peer.out_stream, addr, info_hash, peer_id, handshake_msg, Arc::clone(&known_peers)).await {
@@ -649,6 +650,23 @@ async fn peer_handler(
             _ = delay => {
                 // if we arent currently waiting for a reponse back from our peer and they arent
                 // choking us then claim one of the next rarest pieces and request it.
+                if !waiting && !peer.peer_choking {
+                    let mut info = pieces_info.lock().unwrap();
+                    // this is not rarest first, just random TODO: make rarest first
+                    let p = info.iter().enumerate().filter(|&(_, p)| p.status == PieceStatus::NotRequested).take(4).choose(&mut rand::rng());
+                    match p {
+                        Some((i, p)) => {
+                            info[i].status = PieceStatus::Requested;
+                            if let Ok(bytes_written) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) {
+                                peer.out_stream.write(&stream_buf[..bytes_written]);
+                            }
+                            waiting = true;
+                        },
+                        None => {
+                            // we have downloaded all pieces so no need to send anything
+                        }
+                    }
+                }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
                 // another task has a chance to claim it
