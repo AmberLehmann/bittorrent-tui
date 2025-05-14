@@ -10,6 +10,7 @@ use bitvec::{
     order::Msb0,
     prelude::{BitSlice, BitVec},
 };
+use byteorder::{ByteOrder, NetworkEndian};
 use bytes::{Buf, BytesMut};
 use log::{debug, error, info};
 use rand::{distr::Alphanumeric, random_range, Rng};
@@ -21,6 +22,7 @@ use std::{
     io::Read,
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
+    task::{Context, Poll},
     time::Instant,
 };
 use tokio::{
@@ -28,6 +30,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
+    time::{timeout}
 };
 
 #[derive(Debug)]
@@ -489,7 +492,7 @@ pub async fn handle_torrent(
             Ok((peer_stream, peer_addr)) = listener.accept() => {
                 // a peer is trying to connect to us
                 info!("{peer_addr} attempting to connect");
-
+                // TODO - call handler
             },
             _ = delay => {
                 // request.gen_periodic_req(uploaded, downloaded, left);
@@ -539,8 +542,9 @@ async fn peer_handler(
     let mut last_response = Instant::now();
     info!("connected to {addr}");
 
-    let block_size: usize = 1 << 15; // TODO: ensure is correct
-    let mut incoming_stream: Option<TcpStream> = None;
+    let block_size: usize = 1 << 16; // handle slightly bigger size? (i set it to 16 not 15)
+    let mut incoming_stream: Option<TcpStream> = None; // what is this for??????????????????????
+    let mut len_buf = [0u8; 4];
     let mut stream_buf = vec![0u8; block_size + 50];
     let mut piece_buf = vec![0u8; piece_size];
 
@@ -566,64 +570,109 @@ async fn peer_handler(
 
     // Handshake successful, increment number of peers
     // go into main loop
+    // randomized timeout
     let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
     loop {
         let delay = interval.tick();
         tokio::select! {
+            // ????????? why is this called out_stream, what is in_stream
             _ = peer.out_stream.readable() => {
+
+                // NOTE: we use several awaits here
+                // *must make sure all locks are let go!*
+
                 // either respond to request or
-                match peer.out_stream.try_read(&mut stream_buf) {
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        debug!("would block");
+                // timeout on reads is 2 seconds now
+                match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.peek(&mut len_buf)).await {
+                    Err(e) => {
+                        debug!("would block poll on peek v1: {e}");
+                        continue;
+                    }
+                    Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        debug!("would block poll on peek v2: {e}");
                         continue;
                     },
-                    Ok(0) => {
+                    Ok(Err(e)) => {
+                        error!("peek error: {e}");
+                        return Err(e);
+                    },
+                    Ok(Ok(0)) => {
                         // stream has likely been closed
                         debug!("Stream closed");
                         let _ = tx.send(PeerMsg::Closed);
                         return Ok(());
                     }
-                    Ok(bytes_read) => {
-                        // parse and handle response message from peer
-                        let Ok(msg) = Message::parse(&stream_buf) else { continue };
-                        debug!("read {msg:?}");
+                    Ok(Ok(n)) if n < 4 => {
+                        debug!("not enough data to read message length: {n} bytes available");
+                        continue;
+                    }
+                    Ok(Ok(_)) => {
+                        // read len_buf
+                        let msg_len = (NetworkEndian::read_u32(&len_buf) as usize) + 4;
+                        // prepare to consume at least that much
+                        if stream_buf.len() < msg_len + 4 {
+                            stream_buf.resize(msg_len + 4, 0u8);
+                        }
 
-                        // not every message can be recieved from this connection but good to
-                        // include them anyways
-                        match msg {
-                            Message::KeepAlive => last_response = Instant::now(),
-                            Message::Choke => peer.peer_choking = true,
-                            Message::UnChoke => peer.peer_choking = false,
-                            Message::Interested => peer.peer_interested = true,
-                            Message::NotInterested => peer.peer_interested = false,
-                            Message::Have(h) => {
-                                // update global torrent piece map
-                                let _ = tx.send(PeerMsg::Have(h.piece_index));
+                        // must read in exactly that many bytes, otherwise
+                        // will overread stream (TCP, not UDP)
+                        // so read into a slice of a certain size? i think that should be fine
+                        // timeout on reads is 2 seconds now
+                        match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.read_exact(&mut (stream_buf[0..msg_len+4]))).await {
+                            Err(e) => {
+                                debug!("would block poll on read v1: {e}");
+                                continue;
+                            }
+                            Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                                debug!("would block poll on read v2: {e}");
+                                continue;
                             },
-                            Message::Bitfield(b) => {
-                                // update global torrent piece map
-                                peer.bitfield = b.bitfield.to_bitvec();
-                                let _ = tx.send(PeerMsg::Field(peer.bitfield.clone()));
+                            Ok(Err(e)) => {
+                                error!("read error: {e}");
+                                return Err(e);
                             },
-                            Message::Request(r) => {
-                                // check if we have the piece then send it if we do and if we arent
-                                // choking this peer
-                            },
-                            Message::Piece(p) => {
-                                piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
-                                // TODO: mark the bounds of this section as being filed
-                            },
-                            Message::Cancel(c) => {},
-                            Message::Port(_p) => {
-                                // we dont support DHT so we can ignore this message
-                            },
-                            Message::Unknown => {
-                                log::error!("Received unknown message type.");
-                            },
+                            Ok(Ok(_bytes_read)) => {
+                                // parse and handle response message from peer
+                                let Ok(msg) = Message::parse(&(stream_buf[0..msg_len+4])) else { continue };
+                                debug!("read {msg:?}");
+
+                                // not every message can be recieved from this connection but good to
+                                // include them anyways
+                                match msg {
+                                    Message::KeepAlive => last_response = Instant::now(),
+                                    Message::Choke => peer.peer_choking = true,
+                                    Message::UnChoke => peer.peer_choking = false,
+                                    Message::Interested => peer.peer_interested = true,
+                                    Message::NotInterested => peer.peer_interested = false,
+                                    Message::Have(h) => {
+                                        // update global torrent piece map
+                                        let _ = tx.send(PeerMsg::Have(h.piece_index));
+                                    },
+                                    Message::Bitfield(b) => {
+                                        // update global torrent piece map
+                                        peer.bitfield = b.bitfield.to_bitvec();
+                                        let _ = tx.send(PeerMsg::Field(peer.bitfield.clone()));
+                                    },
+                                    Message::Request(r) => {
+                                        // check if we have the piece then send it if we do and if we arent
+                                        // choking this peer
+                                    },
+                                    Message::Piece(p) => {
+                                        piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
+                                        // TODO: mark the bounds of this section as being filed
+                                    },
+                                    Message::Cancel(c) => {},
+                                    Message::Port(_p) => {
+                                        // we dont support DHT so we can ignore this message
+                                    },
+                                    Message::Unknown => {
+                                        log::error!("Received unknown message type.");
+                                    },
+                                }
+                            }
                         }
                     }
-                    Err(e) => Err(e)?,
                 }
             },
             Some(new_peer) = rx.recv() => {

@@ -1,8 +1,8 @@
 use bitvec::order::Msb0;
-use bitvec::prelude::{BitSlice, BitVec};
+use bitvec::prelude::{BitSlice};
 use bitvec::view::BitView;
-use byteorder::{ByteOrder, NetworkEndian, ReadBytesExt, WriteBytesExt};
-use std::io::{self, Read, Result, Seek, Write};
+use byteorder::{ByteOrder, NetworkEndian, WriteBytesExt};
+use std::io::{self, Result, Seek, Write};
 
 #[derive(Debug)]
 pub struct Have {
