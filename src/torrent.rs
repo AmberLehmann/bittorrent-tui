@@ -324,7 +324,7 @@ pub async fn handle_torrent(
         Info::Multi(_) => return Err(TrackerError::MultiFile),
         Info::Single(f) => f.length,
     };
-    let request = TrackerRequest {
+    let mut request = TrackerRequest {
         info_hash: torrent.info_hash,
         peer_id: torrent.my_peer_id,
         event: Some(TrackerRequestEvent::Started),
@@ -348,18 +348,7 @@ pub async fn handle_torrent(
     info!("Sent initial request to tracker.");
     let mut buf: Vec<u8> = vec![];
     tracker_stream.read_to_end(&mut buf).await?;
-    let header_end = match buf.windows(4).position(|window| window == b"\r\n\r\n") {
-        Some(pos) => pos + 4, // Account for \r\n\r\n
-        None => return Err(TrackerError::MalformedHttpResponse),
-    };
-    let response: TrackerResponse = bendy::serde::from_bytes(&buf[header_end..])?;
-    info!(
-        "Tracker response received: client assigned {} peers.",
-        response.peers.len()
-    );
-
-    // TODO
-    // talk to peers now
+    let response = TrackerResponse::new(&mut buf)?;
 
     // ok so our torrent has
     // pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
@@ -474,17 +463,28 @@ pub async fn handle_torrent(
         })
         .collect();
 
-    let mut buf = Vec::new();
     let tick_rate = std::time::Duration::from_millis(50);
     let mut interval = tokio::time::interval(tick_rate);
+    let mut last_response = Instant::now();
+    let mut buf = BytesMut::with_capacity(1024);
     loop {
         let delay = interval.tick();
         // TODO: make actually async like peer_handler
         tokio::select! {
-            tracker_resp = tracker_stream.read(&mut buf) => {
+            tracker_resp = tracker_stream.read_buf(&mut buf) => {
                 match tracker_resp {
-                    _ => {},
+                    Ok(0) => {
+                        // error!("Tracker closed connection!");
+                    },
+                    Ok(bytes_read) => {
+                        let response = TrackerResponse::new(&mut buf);
+
+                        continue;
+                    },
+                    Err(e) => Err(e)?,
                 }
+
+                buf.clear();
             },
             Ok((peer_stream, peer_addr)) = listener.accept() => {
                 // a peer is trying to connect to us
@@ -492,24 +492,17 @@ pub async fn handle_torrent(
 
             },
             _ = delay => {
+                last_response = Instant::now();
+                // request.gen_periodic_req(uploaded, downloaded, left);
+
+                let mut http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
+                let bytes = tracker_stream.write(&http_msg).await?; // NOTE: Causes Pipe Error (BAD)
+                debug!("Printed {bytes} in periodic update to tracker");
+
                 // send periodic update to tracker
             },
         }
     }
-
-    // FUCK will also need to somehow Arc Mutex reference some set of connections
-    // so that we can do shit with unchoking and stuff
-    // i can't do this right now sorry
-
-    // periodic updates to tracker
-    // needs to be its own thread
-    // TODO
-
-    // someone needs to be checking periodically if we are done downloading?? at which point we kill everything and
-    // tell the tracker I guess?
-    // i guess the selection algorithm maybe can do that
-
-    //Ok(())
 }
 
 enum PeerMsg {
