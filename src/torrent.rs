@@ -440,6 +440,11 @@ pub async fn handle_torrent(
     // spawn listening thread? that will constantly loop on things??
     // keep track of total connections somehow?? so we don't go above 55 TODO
 
+    // TODO: peer handlers should be accessible from all peer handler tasks, something like
+    // a RW lock on them with a marked peer ID
+    // so that we can do this: https://stackoverflow.com/questions/72524074/avoiding-double-inbound-outbound-connection-between-bittorrent-peers
+    // (close an inbound connection to a peer we already have an outbound/inbound connection with after a randomized delay)
+
     let (torrent_tx, peer_rx) = unbounded_channel();
     let handshake_msg = Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
     let peer_handlers: Vec<(JoinHandle<_>, UnboundedSender<TcpStream>)> = response
@@ -493,6 +498,9 @@ pub async fn handle_torrent(
                 // a peer is trying to connect to us
                 info!("{peer_addr} attempting to connect");
                 // TODO - call handler
+                // // so that we can do this: https://stackoverflow.com/questions/72524074/avoiding-double-inbound-outbound-connection-between-bittorrent-peers
+                // close connection after a random delay if we already have a connection with this peer
+                // based on stored peer ID
             },
             _ = delay => {
                 // request.gen_periodic_req(uploaded, downloaded, left);
