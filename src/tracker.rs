@@ -182,7 +182,7 @@ impl TrackerResponse {
 #[derive(Debug)]
 pub struct PeerInfo {
     pub addr: SocketAddr,
-    pub peer_id: Option<Vec<u8>>,
+    pub peer_id: Option<ByteBuf>,
 }
 
 // Custom Deserialization for Peers, should support compact format
@@ -253,7 +253,7 @@ where
                     peer_id: if peer_id.is_empty() {
                         None
                     } else {
-                        Some(peer_id.into_vec())
+                        Some(peer_id)
                     },
                 });
             }

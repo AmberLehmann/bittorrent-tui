@@ -1,18 +1,31 @@
-INFO: torrent.rs:172: open_torrent() read 451 bytes
-INFO: torrent.rs:200: Tracker address: http://cerf.cs.umd.edu:8000/announce
-DEBUG: torrent.rs:223: new_announce_path: /announce
-DEBUG: torrent.rs:235: new_scrape_path: Some("/scrape")
-INFO: torrent.rs:348: Sent initial request to tracker.
+INFO: torrent.rs:177: open_torrent() read 451 bytes
+INFO: torrent.rs:205: Tracker address: http://cerf.cs.umd.edu:8000/announce
+DEBUG: torrent.rs:228: new_announce_path: /announce
+DEBUG: torrent.rs:240: new_scrape_path: Some("/scrape")
+INFO: torrent.rs:353: Sent initial request to tracker.
 TRACE: tracker.rs:232: Deserializing peers in dictionary format.
-DEBUG: tracker.rs:260: peers: [PeerInfo { addr: 10.174.1.73:45123, peer_id: Some([65, 109, 111, 103, 117, 115, 66, 84, 101, 55, 108, 98, 89, 89, 97, 111, 66, 77, 85, 98]) }, PeerInfo { addr: 10.175.153.238:6881, peer_id: Some([45, 113, 66, 53, 48, 48, 48, 45, 79, 55, 48, 105, 105, 99, 115, 81, 116, 84, 108, 87]) }, PeerInfo { addr: 69.140.88.97:4545, peer_id: Some([45, 77, 68, 48, 48, 48, 49, 45, 108, 53, 74, 98, 104, 53, 107, 119, 70, 81, 116, 102]) }, PeerInfo { addr: 10.175.96.96:6881, peer_id: Some([45, 113, 66, 53, 48, 48, 48, 45, 87, 106, 101, 69, 57, 53, 111, 57, 70, 114, 56, 71]) }, PeerInfo { addr: 10.175.30.163:7890, peer_id: Some([54, 102, 74, 29, 96, 195, 134, 194, 140, 195, 186, 195, 187, 44, 195, 183, 100, 34, 194, 156, 194, 143, 195, 187, 107, 37, 56, 42]) }, PeerInfo { addr: 10.174.178.188:6881, peer_id: Some([45, 66, 87, 49, 53, 48, 86, 45, 73, 77, 117, 101, 53, 88, 86, 48, 102, 87, 67, 70]) }, PeerInfo { addr: 52.124.33.177:5000, peer_id: Some([45, 65, 72, 72, 72, 72, 72, 45, 56, 113, 77, 107, 85, 112, 85, 122, 104, 108, 80, 115]) }, PeerInfo { addr: 96.241.241.209:55811, peer_id: Some([45, 113, 66, 53, 48, 53, 48, 45, 90, 49, 56, 68, 112, 69, 80, 83, 49, 48, 45, 67]) }, PeerInfo { addr: 10.174.145.250:6888, peer_id: Some([45, 65, 90, 48, 48, 48, 49, 45, 54, 56, 53, 56, 51, 57, 57, 52, 49, 50, 54, 50]) }, PeerInfo { addr: 173.230.75.46:51413, peer_id: Some([45, 84, 82, 52, 48, 54, 48, 45, 119, 100, 54, 104, 98, 102, 101, 99, 97, 109, 48, 115]) }, PeerInfo { addr: 52.124.33.177:47125, peer_id: Some([45, 85, 84, 51, 54, 48, 87, 45, 92, 194, 184, 29, 195, 168, 98, 54, 194, 134, 77, 87, 80, 27, 90]) }, PeerInfo { addr: 128.8.130.86:8002, peer_id: Some([45, 87, 87, 48, 50, 48, 54, 45, 57, 48, 69, 47, 56, 82, 75, 101, 121, 86, 84, 47]) }, PeerInfo { addr: 173.230.75.46:4545, peer_id: Some([45, 77, 68, 48, 48, 48, 49, 45, 105, 51, 122, 106, 71, 68, 97, 120, 79, 89, 70, 103]) }, PeerInfo { addr: 10.175.230.190:1122, peer_id: Some([68, 85, 67, 75, 89, 89, 45, 194, 161, 194, 191, 126, 195, 187, 195, 147, 105, 40, 195, 147, 195, 178, 88, 194, 179, 77, 195, 152]) }, PeerInfo { addr: 10.174.197.211:45123, peer_id: Some([65, 109, 111, 103, 117, 115, 66, 84, 109, 71, 57, 117, 77, 67, 54, 116, 52, 53, 57, 74]) }, PeerInfo { addr: 96.241.241.209:51413, peer_id: Some([45, 84, 82, 52, 48, 54, 48, 45, 57, 51, 107, 114, 97, 98, 113, 103, 101, 101, 52, 113]) }]
+DEBUG: tracker.rs:260: peers: [PeerInfo { addr: 52.124.33.177:6881, peer_id: Some([45, 77, 68, 48, 48, 48, 49, 45, 194, 182, 94, 12, 105, 68, 195, 162, 65, 194, 145, 32, 25, 120, 195, 146]) }, PeerInfo { addr: 173.230.75.46:51413, peer_id: Some([45, 84, 82, 52, 48, 54, 48, 45, 119, 100, 54, 104, 98, 102, 101, 99, 97, 109, 48, 115]) }, PeerInfo { addr: 128.8.130.86:8002, peer_id: Some([45, 87, 87, 48, 50, 48, 54, 45, 57, 48, 69, 47, 56, 82, 75, 101, 121, 86, 84, 47]) }, PeerInfo { addr: 96.241.241.209:51413, peer_id: Some([45, 84, 82, 52, 48, 54, 48, 45, 57, 51, 107, 114, 97, 98, 113, 103, 101, 101, 52, 113]) }, PeerInfo { addr: 10.175.153.238:6881, peer_id: Some([45, 113, 66, 53, 48, 48, 48, 45, 79, 55, 48, 105, 105, 99, 115, 81, 116, 84, 108, 87]) }, PeerInfo { addr: 96.241.241.209:55811, peer_id: Some([45, 113, 66, 53, 48, 53, 48, 45, 90, 49, 56, 68, 112, 69, 80, 83, 49, 48, 45, 67]) }, PeerInfo { addr: 10.174.197.211:45123, peer_id: Some([65, 109, 111, 103, 117, 115, 66, 84, 109, 71, 57, 117, 77, 67, 54, 116, 52, 53, 57, 74]) }, PeerInfo { addr: 10.174.1.73:45123, peer_id: Some([65, 109, 111, 103, 117, 115, 66, 84, 101, 55, 108, 98, 89, 89, 97, 111, 66, 77, 85, 98]) }, PeerInfo { addr: 52.124.33.177:6889, peer_id: Some([45, 77, 68, 48, 48, 48, 49, 45, 18, 194, 170, 125, 33, 65, 87, 44, 120, 195, 169, 195, 175, 194, 140, 82]) }, PeerInfo { addr: 52.124.33.177:47125, peer_id: Some([45, 85, 84, 51, 54, 48, 87, 45, 92, 194, 184, 29, 195, 168, 98, 54, 194, 134, 77, 87, 80, 27, 90]) }, PeerInfo { addr: 52.124.33.185:5000, peer_id: Some([52, 49, 55, 99, 108, 105, 101, 110, 116, 45, 49, 54, 49, 56, 55, 54, 53, 48, 51, 51]) }, PeerInfo { addr: 173.230.75.46:4545, peer_id: Some([45, 77, 68, 48, 48, 48, 49, 45, 105, 51, 122, 106, 71, 68, 97, 120, 79, 89, 70, 103]) }, PeerInfo { addr: 10.175.230.190:1122, peer_id: Some([68, 85, 67, 75, 89, 89, 45, 194, 161, 194, 191, 126, 195, 187, 195, 147, 105, 40, 195, 147, 195, 178, 88, 194, 179, 77, 195, 152]) }, PeerInfo { addr: 71.178.191.13:6881, peer_id: Some([45, 80, 67, 48, 48, 48, 49, 107, 111, 57, 115, 54, 115, 117, 98, 105, 118, 109, 57, 110]) }, PeerInfo { addr: 52.124.33.177:5000, peer_id: Some([45, 65, 72, 72, 72, 72, 72, 45, 56, 113, 77, 107, 85, 112, 85, 122, 104, 108, 80, 115]) }, PeerInfo { addr: 10.174.178.188:6881, peer_id: Some([45, 66, 87, 49, 53, 48, 86, 45, 73, 77, 117, 101, 53, 88, 86, 48, 102, 87, 67, 70]) }]
 TRACE: tracker.rs:174: Tracker response received: client assigned 16 peers.
-DEBUG: torrent.rs:429: Binding listening socket at 172.31.87.23:45123
-DEBUG: torrent.rs:431: Server is listening.
-INFO: torrent.rs:540: connected to 128.8.130.86:8002
-INFO: torrent.rs:554: Received Handshake Response from: 128.8.130.86:8002
-DEBUG: torrent.rs:558: Length of remote peer_id: 20
-DEBUG: torrent.rs:559: Remote peer_id vec: [45, 87, 87, 48, 50, 48, 54, 45, 57, 48, 69, 47, 56, 82, 75, 101, 121, 86, 84, 47]
-DEBUG: torrent.rs:560: Peer_id response: [45, 87, 87, 48, 50, 48, 54, 45, 57, 48, 69, 47, 56, 82, 75, 101, 121, 86, 84, 47]
-DEBUG: torrent.rs:578: would block
-DEBUG: torrent.rs:578: would block
-DEBUG: torrent.rs:578: would block
+DEBUG: torrent.rs:364: Binding listening socket at 172.31.87.23:45123
+DEBUG: torrent.rs:366: Server is listening.
+WARN: torrent.rs:392: Ignoring peer_id with invalid length: 24 (expected 20)
+WARN: torrent.rs:392: Ignoring peer_id with invalid length: 24 (expected 20)
+WARN: torrent.rs:392: Ignoring peer_id with invalid length: 23 (expected 20)
+WARN: torrent.rs:392: Ignoring peer_id with invalid length: 28 (expected 20)
+INFO: torrent.rs:524: connected to 128.8.130.86:8002
+DEBUG: torrent.rs:795: Handling an outgoing handshake to 128.8.130.86:8002
+DEBUG: torrent.rs:811: Read the handshake from 128.8.130.86:8002
+DEBUG: torrent.rs:821: Confirmed protocol from 128.8.130.86:8002
+DEBUG: torrent.rs:832: Confirmed info_hash from 128.8.130.86:8002
+DEBUG: torrent.rs:838: Got peer_id from 128.8.130.86:8002
+DEBUG: torrent.rs:857: This peer id=[45, 87, 87, 48, 50, 48, 54, 45, 57, 48, 69, 47, 56, 82, 75, 101, 121, 86, 84, 47] was not a known peer, good, allowing connection! 128.8.130.86:8002
+DEBUG: torrent.rs:589: Read msg_len - 4 as 3, 128.8.130.86:8002
+DEBUG: torrent.rs:594: stream_buf[0..msg_len].len() = 7, 128.8.130.86:8002
+DEBUG: torrent.rs:615: read 7 bytes
+DEBUG: torrent.rs:618: read Bitfield(Bitfield { bitfield: BitSlice<u8, bitvec::order::Msb0> { addr: 0x7ff5bc0012b5, head: 000, bits: 16 } [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0] }), 128.8.130.86:8002
+DEBUG: torrent.rs:564: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:589: Read msg_len - 4 as 1, 128.8.130.86:8002
+DEBUG: torrent.rs:594: stream_buf[0..msg_len].len() = 5, 128.8.130.86:8002
+DEBUG: torrent.rs:615: read 5 bytes
+DEBUG: torrent.rs:618: read UnChoke, 128.8.130.86:8002
+DEBUG: torrent.rs:564: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
