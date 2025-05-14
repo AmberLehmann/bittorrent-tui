@@ -14,8 +14,10 @@ mod tui;
 
 pub type PeerId20 = [u8; 20];
 pub type HashedId20 = [u8; 20];
+pub const HANDSHAKE_LEN: usize = 68;
+pub const PROTOCOL_V_1: &[u8; 19] = b"BitTorrent protocol";
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), std::io::Error> {
     // let args = Args::parse();
     let mut terminal = ratatui::init();

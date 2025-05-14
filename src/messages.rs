@@ -1,8 +1,8 @@
 use bitvec::order::Msb0;
-use bitvec::prelude::{BitSlice, BitVec};
+use bitvec::prelude::{BitSlice};
 use bitvec::view::BitView;
-use byteorder::{ByteOrder, NetworkEndian, ReadBytesExt, WriteBytesExt};
-use std::io::{self, Read, Result, Seek, Write};
+use byteorder::{ByteOrder, NetworkEndian, WriteBytesExt};
+use std::io::{self, Result, Seek, Write};
 
 #[derive(Debug)]
 pub struct Have {
@@ -29,7 +29,7 @@ pub struct Piece<'a> {
     // <len=0009+X><id=7><index><begin><block>
     pub index: u32,
     pub begin: u32,
-    pub block: &'a [u8], // TODO - rethink this data type
+    pub block: &'a [u8],
 }
 
 #[derive(Debug)]
@@ -59,6 +59,7 @@ pub enum Message<'a> {
     Piece(Piece<'a>),       // <len=0009+X><id=7><index><begin><block>
     Cancel(Cancel),         // <len=0013><id=8><index><begin><length>
     Port(Port),             // <len=0003><id=9><listen-port>
+    Unknown
 }
 
 impl<'a> Message<'a> {
@@ -126,91 +127,203 @@ impl<'a> Message<'a> {
                 buf[4] = 9;
                 NetworkEndian::write_u16(&mut buf[5..7], s.port);
             }
+            Message::Unknown => {
+                log::error!("Why are you asking me to do this");
+                panic!();
+            }
         }
 
         Ok(NetworkEndian::read_u32(buf) as usize)
     }
 
     pub fn parse(buf: &'a [u8]) -> Result<Self> {
+        if buf.len() < 4 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof, 
+                "Message too short"
+            ));
+        }
         let size = NetworkEndian::read_u32(&buf[0..4]);
+        if buf.len() != 4 + (size as usize) {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof, 
+                format!("Message length different than expected. expected {}, got {}", 4 + (size as usize), buf.len())
+            ));
+        }
 
+        let msg = 
         if size == 0 {
-            return Ok(Message::KeepAlive);
-        }
+            Message::KeepAlive
+        } else {
+            let msg_type = buf[4];
 
-        let msg_type = buf[4];
+            match msg_type {
+                0 => Message::Choke,         // choke
+                1 => Message::UnChoke,       // unchoke
+                2 => Message::Interested,    // interested
+                3 => Message::NotInterested, // not interested
+                4 => {
+                    // have
+                    let piece_index: u32 = NetworkEndian::read_u32(&buf[5..9]);
+                    Message::Have(Have { piece_index })
+                }
+                5 => {
+                    // bitfield
+                    // we know 'size' is a u32 representing 1 + X
+                    // where X is the number of bytes that makes up this bitfield
+                    let bitfield: &BitSlice<u8, Msb0> =
+                        buf[5..5 + size as usize - 1].view_bits::<Msb0>();
+                    Message::Bitfield(Bitfield { bitfield })
+                }
+                6 => {
+                    // request
+                    let index: u32 = NetworkEndian::read_u32(&buf[5..9]);
+                    let begin: u32 = NetworkEndian::read_u32(&buf[9..13]);
+                    let length: u32 = NetworkEndian::read_u32(&buf[13..17]);
+                    Message::Request(Request {
+                        index,
+                        begin,
+                        length,
+                    })
+                }
+                7 => {
+                    // piece
+                    let index: u32 = NetworkEndian::read_u32(&buf[5..9]);
+                    let begin: u32 = NetworkEndian::read_u32(&buf[9..13]);
+                    // len is 9 + X
+                    let len = size as usize - 9;
+                    //reader.read_exact(&mut block)?;
+                    Message::Piece(Piece {
+                        index,
+                        begin,
+                        block: &buf[13..13 + len],
+                    })
+                }
+                8 => {
+                    // cancel
+                    let index: u32 = NetworkEndian::read_u32(&buf[5..9]);
+                    let begin: u32 = NetworkEndian::read_u32(&buf[9..13]);
+                    let length: u32 = NetworkEndian::read_u32(&buf[13..17]);
+                    Message::Cancel(Cancel {
+                        index,
+                        begin,
+                        length,
+                    })
+                }
+                9 => {
+                    // port
+                    let port: u16 = NetworkEndian::read_u16(&buf[5..7]);
+                    Message::Port(Port { port })
+                }
+                _ => Message::Unknown,
+            }
+        };
 
-        match msg_type {
-            0 => Ok(Message::Choke),         // choke
-            1 => Ok(Message::UnChoke),       // unchoke
-            2 => Ok(Message::Interested),    // interested
-            3 => Ok(Message::NotInterested), // not interested
-            4 => {
-                // have
-                let piece_index: u32 = NetworkEndian::read_u32(&buf[5..9]);
-                Ok(Message::Have(Have { piece_index }))
-            }
-            5 => {
-                // bitfield
-                // we know 'size' is a u32 representing 1 + X
-                // where X is the number of bytes that makes up this bitfield
-                let bitfield: &BitSlice<u8, Msb0> =
-                    buf[5..5 + size as usize - 1].view_bits::<Msb0>();
-                Ok(Message::Bitfield(Bitfield { bitfield }))
-            }
-            6 => {
-                // request
-                let index: u32 = NetworkEndian::read_u32(&buf[5..9]);
-                let begin: u32 = NetworkEndian::read_u32(&buf[9..13]);
-                let length: u32 = NetworkEndian::read_u32(&buf[13..17]);
-                Ok(Message::Request(Request {
-                    index,
-                    begin,
-                    length,
-                }))
-            }
-            7 => {
-                // piece
-                let index: u32 = NetworkEndian::read_u32(&buf[5..9]);
-                let begin: u32 = NetworkEndian::read_u32(&buf[9..13]);
-                // len is 9 + X
-                let len = size as usize - 9;
-                //reader.read_exact(&mut block)?;
-                Ok(Message::Piece(Piece {
-                    index,
-                    begin,
-                    block: &buf[13..13 + len],
-                }))
-            }
-            8 => {
-                // cancel
-                let index: u32 = NetworkEndian::read_u32(&buf[5..9]);
-                let begin: u32 = NetworkEndian::read_u32(&buf[9..13]);
-                let length: u32 = NetworkEndian::read_u32(&buf[13..17]);
-                Ok(Message::Cancel(Cancel {
-                    index,
-                    begin,
-                    length,
-                }))
-            }
-            9 => {
-                // port
-                let port: u16 = NetworkEndian::read_u16(&buf[5..7]);
-                Ok(Message::Port(Port { port }))
-            }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid message type",
-            )),
-        }
+        Ok(msg) // return message + remaining buffer
     }
 }
 
 // NOTE: Use `cargo test -- --show-output`.
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::io::Cursor; // https://doc.rust-lang.org/std/io/struct.Cursor.html (fake IO from https://doc.rust-lang.org/std/io/trait.Write.html)
+    // use std::fs::File;
+
     #[test]
-    fn create_msg_type_piece() {
-        // TODO test
+    fn create_and_parse_msg_type_piece() {
+        let block = b"hehe";
+        let msg_struct = Message::Piece(Piece {
+            index: 7,
+            begin: 2,
+            block
+        });
+
+        let mut fake_tcp_stream = Cursor::new(vec![0u8; 17]);
+        let _total_len = msg_struct.create(&mut fake_tcp_stream).unwrap();
+
+        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+        match parsed {
+            Message::Piece(p) => {
+                assert_eq!(p.index, 7);
+                assert_eq!(p.begin, 2);
+                assert_eq!(p.block, block);
+            }
+            _ => panic!("Not a piece"),
+        }
+    }
+
+    #[test]
+    fn hardcode_and_parse_msg_type_piece() {
+        let fake_tcp_stream = Cursor::new(
+            vec![
+                // <len=9+4> (4 bytes)
+                0x00, 0x00, 0x00, 0x0D,
+                // <id=7> (1 byte)
+                0x07,
+                // <index=7> (4 bytes)
+                0x00, 0x00, 0x00, 0x07,
+                // <begin=2> (4 bytes)
+                0x00, 0x00, 0x00, 0x02,
+                // <block=b"hehe">
+                b'h', b'e', b'h', b'e'
+            ]
+        );
+
+        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+        match parsed {
+            Message::Piece(p) => {
+                assert_eq!(p.index, 7);
+                assert_eq!(p.begin, 2);
+                assert_eq!(p.block, b"hehe");
+            }
+            _ => panic!("Not a piece"),
+        }
+    }
+
+    #[test]
+    fn create_and_parse_msg_type_bitfield() {
+        let bitfield = vec![0xAF];
+        let bitfield = BitSlice::<u8, Msb0>::from_slice(&bitfield);
+        let msg_struct = Message::Bitfield(Bitfield {
+            bitfield
+        });
+
+        let mut fake_tcp_stream = Cursor::new(vec![0u8; 6]);
+        let _total_len = msg_struct.create(&mut fake_tcp_stream).unwrap();
+
+        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+        match parsed {
+            Message::Bitfield(p) => {
+                let expected_v = vec![0b10101111u8];
+                let expected_bits = BitSlice::<u8, Msb0>::from_slice(&expected_v);
+                assert_eq!(p.bitfield, expected_bits);
+            }
+            _ => panic!("Not a bitfield"),
+        }
+    }
+
+    #[test]
+    fn hardcode_and_parse_msg_type_bitfield() {
+        let fake_tcp_stream = Cursor::new(
+            vec![
+                // <len=1+1> (4 bytes)
+                0x00, 0x00, 0x00, 0x02,
+                // <id=5> (1 byte)
+                0x05,
+                // <bitfield=in binary 1010=A 1111=F>
+                0xAF
+            ]
+        );
+
+        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+        match parsed {
+            Message::Bitfield(p) => {
+                let expected_v = vec![0b10101111u8];
+                let expected_bits = BitSlice::<u8, Msb0>::from_slice(&expected_v);
+                assert_eq!(p.bitfield, expected_bits);
+            }
+            _ => panic!("Not a bitfield"),
+        }
     }
 }
