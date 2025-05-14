@@ -245,7 +245,8 @@ impl Torrent {
                     }
                     let this_piece_len = this_piece_len as u32;
                     // prep spot to put that data
-                    pieces_to_download_data.push(Vec::with_capacity(this_piece_len as usize));
+                    pieces_to_download_data
+                        .push(RwLock::new(Vec::with_capacity(this_piece_len as usize)));
 
                     // what do we know about this piece
 
@@ -286,7 +287,7 @@ impl Torrent {
                     local_addr: SocketAddr::new(torrent.ip, torrent.port),
                     compact: torrent.compact,
                     pieces_info: Arc::new(Mutex::new(pieces_to_download_info)),
-                    pieces_data: Arc::new(Mutex::new(pieces_to_download_data)),
+                    pieces_data: Arc::new(pieces_to_download_data),
                 })
             }
             Info::Multi(_) => Err(OpenTorrentError::MultiFile),
