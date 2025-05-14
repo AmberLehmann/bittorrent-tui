@@ -1,5 +1,5 @@
 use bitvec::order::Msb0;
-use bitvec::prelude::{BitSlice};
+use bitvec::prelude::BitSlice;
 use bitvec::view::BitView;
 use byteorder::{ByteOrder, NetworkEndian, WriteBytesExt};
 use std::io::{self, Result, Seek, Write};
@@ -59,7 +59,7 @@ pub enum Message<'a> {
     Piece(Piece<'a>),       // <len=0009+X><id=7><index><begin><block>
     Cancel(Cancel),         // <len=0013><id=8><index><begin><length>
     Port(Port),             // <len=0003><id=9><listen-port>
-    Unknown
+    Unknown,
 }
 
 impl<'a> Message<'a> {
@@ -140,21 +140,28 @@ impl<'a> Message<'a> {
         if buf.len() < 4 {
             log::error!("Message length too short, got {}", buf.len());
             return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof, 
-                "Message too short"
+                io::ErrorKind::UnexpectedEof,
+                "Message too short",
             ));
         }
         let size = NetworkEndian::read_u32(&buf[0..4]);
         if buf.len() != 4 + (size as usize) {
-            log::error!("Message length different than expected. expected {}, got {}", 4 + (size as usize), buf.len());
+            log::error!(
+                "Message length different than expected. expected {}, got {}",
+                4 + (size as usize),
+                buf.len()
+            );
             return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof, 
-                format!("Message length different than expected. expected {}, got {}", 4 + (size as usize), buf.len())
+                io::ErrorKind::UnexpectedEof,
+                format!(
+                    "Message length different than expected. expected {}, got {}",
+                    4 + (size as usize),
+                    buf.len()
+                ),
             ));
         }
 
-        let msg = 
-        if size == 0 {
+        let msg = if size == 0 {
             Message::KeepAlive
         } else {
             let msg_type = buf[4];

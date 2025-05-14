@@ -4,8 +4,7 @@ use crate::{
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
-    HashedId20, PeerId20,
-    HANDSHAKE_LEN, PROTOCOL_V_1
+    HashedId20, PeerId20, HANDSHAKE_LEN, PROTOCOL_V_1,
 };
 use bitvec::{
     order::Msb0,
@@ -32,7 +31,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
-    time::{timeout}
+    time::timeout,
 };
 
 #[derive(Debug)]
@@ -355,7 +354,6 @@ pub async fn handle_torrent(
     tracker_stream.read_to_end(&mut buf).await?;
     let mut response = TrackerResponse::new(&mut buf)?;
 
-
     // Start listening
 
     // to prevent duplicate connections if we can
@@ -384,18 +382,17 @@ pub async fn handle_torrent(
                 Some(bytes) if bytes.len() == 20 => {
                     let slice: &[u8] = bytes.as_ref();
                     Some(slice.try_into().expect("length checked above"))
-                },
-                Some(bytes) if bytes.len() == 0 => {
-                    None
-                },
+                }
+                Some(bytes) if bytes.len() == 0 => None,
                 Some(bytes) => {
-                    error!("Ignoring peer_id with invalid length: {} (expected 20)", bytes.len());
+                    error!(
+                        "Ignoring peer_id with invalid length: {} (expected 20)",
+                        bytes.len()
+                    );
                     None
                     // TODO - do not connect to this peer!!!
-                },
-                None => {
-                    None
                 }
+                None => None,
             };
             (
                 tokio::spawn(peer_handler(
@@ -410,7 +407,7 @@ pub async fn handle_torrent(
                     rx,
                     known_peers_clone,
                     true,
-                    None
+                    None,
                 )),
                 tx,
             )
@@ -505,12 +502,16 @@ async fn peer_handler(
     mut rx: UnboundedReceiver<TcpStream>,
     known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
     is_outgoing: bool,
-    existing_stream: Option<TcpStream>
+    existing_stream: Option<TcpStream>,
 ) -> Result<(), tokio::io::Error> {
     let mut peer = ConnectedPeer {
         addr,
         id: peer_id,
-        out_stream: if let Some(s) = existing_stream {s} else {TcpStream::connect(addr).await?},
+        out_stream: if let Some(s) = existing_stream {
+            s
+        } else {
+            TcpStream::connect(addr).await?
+        },
         in_stream: None,
         am_choking: true,
         peer_choking: true,
@@ -530,19 +531,42 @@ async fn peer_handler(
     let mut waiting = false;
 
     if is_outgoing {
-        if let Err(e) = do_outgoing_handshake(&mut peer.out_stream, addr, info_hash, peer_id, handshake_msg, Arc::clone(&known_peers)).await {
+        if let Err(e) = do_outgoing_handshake(
+            &mut peer.out_stream,
+            addr,
+            info_hash,
+            peer_id,
+            handshake_msg,
+            Arc::clone(&known_peers),
+        )
+        .await
+        {
             error!("Handshake error, returning from peer_handler");
             // close socket!!!! TODO
-            return Err(tokio::io::Error::new(tokio::io::ErrorKind::Other, format!("Handshake failed")));
+            return Err(tokio::io::Error::new(
+                tokio::io::ErrorKind::Other,
+                format!("Handshake failed"),
+            ));
         }
     } else {
-        if let Err(e) = do_incoming_handshake(&mut peer.out_stream, addr, info_hash, peer_id, handshake_msg, Arc::clone(&known_peers)).await {
+        if let Err(e) = do_incoming_handshake(
+            &mut peer.out_stream,
+            addr,
+            info_hash,
+            peer_id,
+            handshake_msg,
+            Arc::clone(&known_peers),
+        )
+        .await
+        {
             error!("Handshake error, returning from peer_handler");
             // close socket!!!! TODO
-            return Err(tokio::io::Error::new(tokio::io::ErrorKind::Other, format!("Handshake failed")));
+            return Err(tokio::io::Error::new(
+                tokio::io::ErrorKind::Other,
+                format!("Handshake failed"),
+            ));
         }
     }
-    
 
     // Handshake successful, increment number of peers
     // go into main loop
@@ -616,7 +640,7 @@ async fn peer_handler(
                                 // parse and handle response message from peer
                                 let Ok(msg) = Message::parse(&(stream_buf[0..msg_len])) else { continue };
                                 debug!("read {msg:?}, {addr}");
-                                
+
 
                                 // not every message can be recieved from this connection but good to
                                 // include them anyways
@@ -696,7 +720,7 @@ pub enum DoHandshakeError {
     DuplicatePeerId,
     BadHashId,
     FailedLock,
-    TooManyPeers
+    TooManyPeers,
 }
 
 async fn do_incoming_handshake(
@@ -722,7 +746,10 @@ async fn do_incoming_handshake(
     let pstrlen = their_handshake[0] as usize;
     let pstr = &their_handshake[1..1 + pstrlen];
     if pstr != PROTOCOL_V_1 {
-        error!("Expected protocol {:?}, got protocol {:?}", PROTOCOL_V_1, pstr);
+        error!(
+            "Expected protocol {:?}, got protocol {:?}",
+            PROTOCOL_V_1, pstr
+        );
         return Err(DoHandshakeError::BadProtocolString);
     }
 
@@ -733,7 +760,10 @@ async fn do_incoming_handshake(
     // info_hash handling
     let received_info_hash = &their_handshake[1 + pstrlen + 8..1 + pstrlen + 8 + 20];
     if received_info_hash != info_hash {
-        error!("Expected info_hash {:?}, got info_hash {:?}", info_hash, received_info_hash);
+        error!(
+            "Expected info_hash {:?}, got info_hash {:?}",
+            info_hash, received_info_hash
+        );
         return Err(DoHandshakeError::BadHashId);
     }
 
@@ -755,7 +785,9 @@ async fn do_incoming_handshake(
         error!("Could not read peer_id: {e}");
         return Err(DoHandshakeError::BadRead);
     }
-    let their_id: PeerId20 = their_id.try_into().map_err(|_| DoHandshakeError::BadPeerId)?;
+    let their_id: PeerId20 = their_id
+        .try_into()
+        .map_err(|_| DoHandshakeError::BadPeerId)?;
 
     debug!("Got peer_id from {}", peer_addr);
 
@@ -775,7 +807,10 @@ async fn do_incoming_handshake(
                 drop(known_peers_writer);
                 return Err(DoHandshakeError::TooManyPeers);
             }
-            debug!("This peer id={:?} was not a known peer {}", &their_id, peer_addr);
+            debug!(
+                "This peer id={:?} was not a known peer {}",
+                &their_id, peer_addr
+            );
             known_peers_writer.insert(their_id, peer_addr);
             drop(known_peers_writer);
         }
@@ -814,7 +849,10 @@ async fn do_outgoing_handshake(
     let pstrlen = their_handshake[0] as usize;
     let pstr = &their_handshake[1..1 + pstrlen];
     if pstr != PROTOCOL_V_1 {
-        error!("Expected protocol {:?}, got protocol {:?}", PROTOCOL_V_1, pstr);
+        error!(
+            "Expected protocol {:?}, got protocol {:?}",
+            PROTOCOL_V_1, pstr
+        );
         return Err(DoHandshakeError::BadProtocolString);
     }
 
@@ -825,7 +863,10 @@ async fn do_outgoing_handshake(
     // info_hash handling
     let received_info_hash = &their_handshake[1 + pstrlen + 8..1 + pstrlen + 8 + 20];
     if received_info_hash != info_hash {
-        error!("Expected info_hash {:?}, got info_hash {:?}", info_hash, received_info_hash);
+        error!(
+            "Expected info_hash {:?}, got info_hash {:?}",
+            info_hash, received_info_hash
+        );
         return Err(DoHandshakeError::BadHashId);
     }
 
@@ -833,12 +874,17 @@ async fn do_outgoing_handshake(
 
     // peer_id handling
     let their_id_bytes = &their_handshake[1 + pstrlen + 8 + 20..];
-    let their_id: PeerId20 = their_id_bytes.try_into().map_err(|_| DoHandshakeError::BadPeerId)?;
+    let their_id: PeerId20 = their_id_bytes
+        .try_into()
+        .map_err(|_| DoHandshakeError::BadPeerId)?;
 
     debug!("Got peer_id from {}", peer_addr);
     if let Some(expected_peer_id) = peer_id {
         if expected_peer_id != their_id {
-            error!("Got peer_id {:?}, but expected \nid {:?}", their_id, expected_peer_id);
+            error!(
+                "Got peer_id {:?}, but expected \nid {:?}",
+                their_id, expected_peer_id
+            );
         } // caller makes sure we aren't connecting to self
     }
 
@@ -854,7 +900,10 @@ async fn do_outgoing_handshake(
                 drop(known_peers_writer);
                 return Err(DoHandshakeError::DuplicatePeerId);
             }
-            debug!("This peer id={:?} was not a known peer, good, allowing connection! {}", &their_id, peer_addr);
+            debug!(
+                "This peer id={:?} was not a known peer, good, allowing connection! {}",
+                &their_id, peer_addr
+            );
             known_peers_writer.insert(their_id, peer_addr);
             drop(known_peers_writer);
         }
