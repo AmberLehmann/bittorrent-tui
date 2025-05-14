@@ -1,5 +1,5 @@
 use crate::{
-    logger::{LogTab, LEVELS},
+    logger::LogTab,
     metainfo::Info,
     popup::{ConfirmationPopup, OpenTorrentPopup, OpenTorrentResult, PopupStatus},
     theme::THEME,
@@ -18,7 +18,6 @@ use ratatui::{
     widgets::{Block, Borders, Widget},
     Frame,
 };
-use std::{fs::File, io::BufWriter, io::Write};
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
@@ -109,13 +108,6 @@ impl App {
 
             // TODO: send periodic updates to tracker for each active torrent
         }
-
-        let mut logfile = BufWriter::new(File::create("log.txt")?);
-        for (l, t) in &self.log_tab.text {
-            logfile.write(format!("{}{}", LEVELS[*l as usize - 1], t).as_bytes())?;
-        }
-        logfile.flush()?;
-
         Ok(())
     }
 

@@ -1,30 +1,26 @@
 use crate::{
     handshake::Handshake,
-    messages::{self, Message},
+    messages::Message,
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20, PeerId20,
-    HANDSHAKE_LEN, PROTOCOL_V_1
 };
 use bitvec::{
     order::Msb0,
     prelude::{BitSlice, BitVec},
 };
-use byteorder::{ByteOrder, NetworkEndian};
 use bytes::{Buf, BytesMut};
 use log::{debug, error, info};
-use rand::{distr::Alphanumeric, random_range, seq::IteratorRandom, Rng};
+use rand::{distr::Alphanumeric, random_range, Rng};
 use regex::Regex;
 use sha1::{Digest, Sha1};
 use std::{
-    collections::HashMap,
     fmt::Display,
     fs::File,
     io::Read,
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
-    task::{Context, Poll},
     time::Instant,
 };
 use tokio::{
@@ -32,7 +28,6 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
-    time::{timeout}
 };
 
 #[derive(Debug)]
@@ -108,7 +103,7 @@ pub struct TorrentInfo {
     pub speed: u64,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone)]
 pub enum PieceStatus {
     NotRequested,
     Requested,
@@ -355,15 +350,88 @@ pub async fn handle_torrent(
     tracker_stream.read_to_end(&mut buf).await?;
     let mut response = TrackerResponse::new(&mut buf)?;
 
+    // ok so our torrent has
+    // pub pieces_downloaded: Vec<(Option<Vec<u8>>, PieceStatus, usize)>
+    // pub local_addr: SocketAddr,
 
-    // Start listening
+    // and the response has
+    // pub peers: Vec<PeerInfo>
+    // pub interval: u64
+    // pub min_interval: Option<u64>
+    // pub tracker_id: Option<ByteBuf>
+    // where
+    // pub struct PeerInfo {
+    //     pub addr: SocketAddr,
+    //     pub peer_id: Option<Vec<u8>>
+    // }
 
-    // to prevent duplicate connections if we can
-    let known_peers = Arc::new(Mutex::new(HashMap::<PeerId20, SocketAddr>::new()));
+    // "the official client version 3 in fact only actively forms new connections
+    // if it has less than 30 peers and will refuse connections if it has 55."
+    // so start listening and being prepeated to accept incoming connections
+    // and connect to 30 of the peers from the response
+
+    // we also need to be periodically making requests to the tracker
+    // based on the interval from the tracker response
+    // which have info like uploaded, downloaded, left
+    // as well as "event" started/stopped/completed
+    // presumably we should send stopped when we finish
+    // unless we'd violate min interval(?)
+
+    // for each connection we form, send a handshake
+    // expect a handshake back
+    // make sure if there is a peer_id, it should match the peer_id we're
+    // expecting from this connection based on the tracker info
+
+    // for each connection we accept, expect a handshake
+    // read in the handshake up to the info hash
+    // if the info hash does not match, close the connection
+    // if it does, be prepared that you may or may not get a peer_id as well and deal with that as needed(?)
+    // then send a handshake back
+
+    // once the handshake happens, we optionally send a bitfield
+    // and/or optionally expect a bitfield
+    // and must drop if it doesn't match expectations
+    // "optional" meaning don't send if you have no pieces
+    // if you have pieces you must send it lol
+
+    // therefore we need to create a bitfield:
+    // TODO: create bitfield from pieces_downloaded in clever way
+
+    // ok so make a structure here(?) for connections
+    // holding ConnectedPeer type values
+    // start with the 30 of them, both sides choking and both sides interested
+
+    // then I assume we send "interested" if they have stuff I don't have based on the bitfield??
+    // and we wait for them to unchoke us
+    // once this is true we can send them requests
+
+    // we need to send keep-alives every <2 minutes
+
+    // we need to choke/unchoke/interested/not interested
+    // based on Choking and Optimistic Unchoking
+    // blocks are uploaded when we are not choking them, and they are interested in us
+    // assumption: we can request things when they are not choking us and we are interested in them
+
+    // we need to send "have"s whenever we get a new piece fully
+
+    // we need to send requests for things of up to size 2^14(?) based on the downloading strategy
+    // when we receive responses to these, calculate upload rate?
+    // must set a timeout of 60secs for "anti-snubbing"
+    // in which case mark the piece as open to be requested by another thread
+    // and for anti-snubbing maybe(?) mark this guy as choked and do ???? i don't really get this
+    // i guess mark them as having a shit upload rate or something? idk
+
+    // we need to respond to requests for things, and/or not based on a "cancel"
+    //      we are advised to keep a few (10ish?) unfullfilled requests on each connection??
+
+    // ec: enter endgame mode eventually
 
     log::debug!("Binding listening socket at {}", torrent.local_addr);
     let listener = TcpListener::bind(torrent.local_addr).await?;
     log::debug!("Server is listening.");
+
+    //let pieces_info_arc_clone = Arc::clone(&torrent.pieces_info);
+    //let pieces_data_arc_clone = Arc::clone(&torrent.pieces_data);
 
     // accept incoming connections + process connection inputs/outputs
     // spawn listening thread? that will constantly loop on things??
@@ -371,7 +439,7 @@ pub async fn handle_torrent(
 
     let (torrent_tx, peer_rx) = unbounded_channel();
     let handshake_msg = Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
-    let mut peer_handlers: Vec<(JoinHandle<_>, UnboundedSender<TcpStream>)> = response
+    let peer_handlers: Vec<(JoinHandle<_>, UnboundedSender<TcpStream>)> = response
         .peers
         .iter()
         .take(30)
@@ -379,38 +447,16 @@ pub async fn handle_torrent(
         .map(|p| {
             let msg = handshake_msg.clone();
             let (tx, rx) = unbounded_channel();
-            let known_peers_clone = Arc::clone(&known_peers);
-            let real_peer_id: Option<PeerId20> = match &p.peer_id {
-                Some(bytes) if bytes.len() == 20 => {
-                    let slice: &[u8] = bytes.as_ref();
-                    Some(slice.try_into().expect("length checked above"))
-                },
-                Some(bytes) if bytes.len() == 0 => {
-                    None
-                },
-                Some(bytes) => {
-                    error!("Ignoring peer_id with invalid length: {} (expected 20)", bytes.len());
-                    None
-                    // TODO - do not connect to this peer!!!
-                },
-                None => {
-                    None
-                }
-            };
             (
                 tokio::spawn(peer_handler(
                     p.addr,
-                    real_peer_id,
-                    torrent.info_hash,
+                    p.peer_id.clone(),
                     torrent.meta_info.info.piece_length(),
                     torrent.pieces_info.clone(),
                     torrent.pieces_data.clone(),
                     msg,
                     torrent_tx.clone(),
                     rx,
-                    known_peers_clone,
-                    true,
-                    None
                 )),
                 tx,
             )
@@ -441,42 +487,16 @@ pub async fn handle_torrent(
                 buf.clear();
             },
             Ok((peer_stream, peer_addr)) = listener.accept() => {
-
                 // a peer is trying to connect to us
                 info!("{peer_addr} attempting to connect");
 
-                // accept incoming peer start
-                let msg = handshake_msg.clone();
-                let (tx, rx) = unbounded_channel();
-                let known_peers_clone = Arc::clone(&known_peers);
-
-                // also maybe it needs a lock? TODO
-                peer_handlers.push(
-                    (tokio::spawn(peer_handler(
-                        peer_addr,
-                        None,
-                        torrent.info_hash,
-                        torrent.meta_info.info.piece_length(),
-                        torrent.pieces_info.clone(),
-                        torrent.pieces_data.clone(),
-                        msg,
-                        torrent_tx.clone(),
-                        rx,
-                        known_peers_clone,
-                        false,
-                        Some(peer_stream)
-                    )),
-                    tx)
-                );
-
-                // accept incoming peer end
             },
             _ = delay => {
                 // request.gen_periodic_req(uploaded, downloaded, left);
                 if last_request.elapsed() > std::time::Duration::from_secs(response.interval) {
                     last_request = Instant::now();
-                    let http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
-                    tracker_stream.write_all(&http_msg).await?; // NOTE: Causes Pipe Error (BAD) - maybe change helps?
+                    let mut http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
+                    tracker_stream.write_all_buf(&mut http_msg).await?; // NOTE: Causes Pipe Error (BAD)
                 }
                 // send periodic update to tracker
             },
@@ -495,22 +515,18 @@ enum PeerMsg {
 // the next await is enough?
 async fn peer_handler(
     addr: SocketAddr,
-    peer_id: Option<PeerId20>,
-    info_hash: HashedId20,
+    peer_id: Option<Vec<u8>>,
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
     pieces_data: Arc<Vec<RwLock<Vec<u8>>>>,
     mut handshake_msg: BytesMut,
     tx: UnboundedSender<PeerMsg>,
     mut rx: UnboundedReceiver<TcpStream>,
-    known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
-    is_outgoing: bool,
-    existing_stream: Option<TcpStream>
 ) -> Result<(), tokio::io::Error> {
     let mut peer = ConnectedPeer {
         addr,
         id: peer_id,
-        out_stream: if let Some(s) = existing_stream {s} else {TcpStream::connect(addr).await?},
+        out_stream: TcpStream::connect(addr).await?,
         in_stream: None,
         am_choking: true,
         peer_choking: true,
@@ -523,342 +539,110 @@ async fn peer_handler(
     let mut last_response = Instant::now();
     info!("connected to {addr}");
 
-    let block_size: usize = 1 << 16; // handle slightly bigger size? (i set it to 16 not 15)
-    let mut len_buf = [0u8; 4];
+    let block_size: usize = 1 << 15; // TODO: ensure is correct
+    let mut incoming_stream: Option<TcpStream> = None;
     let mut stream_buf = vec![0u8; block_size + 50];
     let mut piece_buf = vec![0u8; piece_size];
-    let mut waiting = false;
 
-    if is_outgoing {
-        if let Err(e) = do_outgoing_handshake(&mut peer.out_stream, addr, info_hash, peer_id, handshake_msg, Arc::clone(&known_peers)).await {
-            error!("Handshake error, returning from peer_handler");
-            // close socket!!!! TODO
-            return Err(tokio::io::Error::new(tokio::io::ErrorKind::Other, format!("Handshake failed")));
-        }
-    } else {
-        if let Err(e) = do_incoming_handshake(&mut peer.out_stream, addr, info_hash, peer_id, handshake_msg, Arc::clone(&known_peers)).await {
-            error!("Handshake error, returning from peer_handler");
-            // close socket!!!! TODO
-            return Err(tokio::io::Error::new(tokio::io::ErrorKind::Other, format!("Handshake failed")));
-        }
+    // perform handshake
+    while handshake_msg.has_remaining() {
+        peer.out_stream.write_all_buf(&mut handshake_msg).await?;
     }
-    
+    // handshake_msg.resize(68, 0);
+    let mut response = [0u8; 68];
+    peer.out_stream.read_exact(&mut response).await?;
+    info!("Received Handshake Response from: {}", addr);
+    let mut peer_id_response: PeerId20 = [0u8; 20];
+    peer_id_response.copy_from_slice(&response[48..68]);
+    if let Some(remote_peer_vec) = peer.id {
+        log::debug!("Length of remote peer_id: {}", remote_peer_vec.len());
+        log::debug!("Remote peer_id vec: {:?}", remote_peer_vec);
+        log::debug!("Peer_id response: {:?}", peer_id_response);
+        if remote_peer_vec != peer_id_response {
+            error!("Peer ID not matching in dictionary format!");
+        }
+        // TODO: Verify peer_id_response
+    }
 
     // Handshake successful, increment number of peers
     // go into main loop
-    // randomized timeout
     let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
     loop {
         let delay = interval.tick();
         tokio::select! {
             _ = peer.out_stream.readable() => {
-                // debug!("Reselected peer.out_stream.readable()");
-                // NOTE: we use several awaits here
-                // *must make sure all locks are let go!*
-
                 // either respond to request or
-                // timeout on reads is 2 seconds now
-                match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.peek(&mut len_buf)).await {
-                    Err(e) => {
-                        debug!("would block poll on peek v1: {e}, {addr}");
-                        continue;
-                    }
-                    Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        debug!("would block poll on peek v2: {e}, {addr}");
+                match peer.out_stream.try_read(&mut stream_buf) {
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        debug!("would block");
                         continue;
                     },
-                    Ok(Err(e)) => {
-                        error!("peek error: {e}, {addr}");
-                        return Err(e);
-                    },
-                    Ok(Ok(0)) => {
+                    Ok(0) => {
                         // stream has likely been closed
-                        debug!("Stream closed, {addr}");
+                        debug!("Stream closed");
                         let _ = tx.send(PeerMsg::Closed);
                         return Ok(());
                     }
-                    Ok(Ok(n)) if n < 4 => {
-                        // debug!("not enough data to read message length: {n} bytes available");  // idk can just comment this out lol
-                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // idk can just comment this out lol
-                        continue;
-                    }
-                    Ok(Ok(_)) => {
-                        // read len_buf
-                        let msg_len = (NetworkEndian::read_u32(&len_buf) as usize) + 4;
-                        debug!("Read msg_len - 4 as {}, {addr}", msg_len - 4);
-                        // prepare to consume at least that much
-                        if stream_buf.len() < msg_len {
-                            stream_buf.resize(msg_len, 0u8);
-                        }
-                        debug!("stream_buf[0..msg_len].len() = {}, {addr}", stream_buf[0..msg_len].len());
+                    Ok(bytes_read) => {
+                        // parse and handle response message from peer
+                        let Ok(msg) = Message::parse(&stream_buf) else { continue };
+                        debug!("read {msg:?}");
 
-                        // must read in exactly that many bytes, otherwise
-                        // will overread stream (TCP, not UDP)
-                        // so read into a slice of a certain size? i think that should be fine
-                        // timeout on reads is 2 seconds now
-                        match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.read_exact(&mut (stream_buf[0..msg_len]))).await {
-                            Err(e) => {
-                                debug!("would block poll on read v1: {e}, {addr}");
-                                continue;
-                            }
-                            Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                                debug!("would block poll on read v2: {e}, {addr}"); // idk can just comment this out lol
-                                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // idk can just comment this out lol
-                                continue;
+                        // not every message can be recieved from this connection but good to
+                        // include them anyways
+                        match msg {
+                            Message::KeepAlive => last_response = Instant::now(),
+                            Message::Choke => peer.peer_choking = true,
+                            Message::UnChoke => peer.peer_choking = false,
+                            Message::Interested => peer.peer_interested = true,
+                            Message::NotInterested => peer.peer_interested = false,
+                            Message::Have(h) => {
+                                // update global torrent piece map
+                                let _ = tx.send(PeerMsg::Have(h.piece_index));
                             },
-                            Ok(Err(e)) => {
-                                error!("read error: {e}, {addr}");
-                                return Err(e);
+                            Message::Bitfield(b) => {
+                                // update global torrent piece map
+                                peer.bitfield = b.bitfield.to_bitvec();
+                                let _ = tx.send(PeerMsg::Field(peer.bitfield.clone()));
                             },
-                            Ok(Ok(_bytes_read)) => {
-                                // parse and handle response message from peer
-                                let Ok(msg) = Message::parse(&(stream_buf[0..msg_len+4])) else { continue };
-                                debug!("read {msg:?}, {addr}");
-
-                                // not every message can be recieved from this connection but good to
-                                // include them anyways
-                                match msg {
-                                    Message::KeepAlive => last_response = Instant::now(),
-                                    Message::Choke => peer.peer_choking = true,
-                                    Message::UnChoke => peer.peer_choking = false,
-                                    Message::Interested => peer.peer_interested = true,
-                                    Message::NotInterested => peer.peer_interested = false,
-                                    Message::Have(h) => {
-                                        // update global torrent piece map
-                                        let _ = tx.send(PeerMsg::Have(h.piece_index));
-                                    },
-                                    Message::Bitfield(b) => {
-                                        // update global torrent piece map
-                                        peer.bitfield = b.bitfield.to_bitvec();
-                                        let _ = tx.send(PeerMsg::Field(peer.bitfield.clone()));
-                                    },
-                                    Message::Request(r) => {
-                                        // check if we have the piece then send it if we do and if we arent
-                                        // choking this peer
-                                    },
-                                    Message::Piece(p) => {
-                                        piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
-                                        // TODO: mark the bounds of this section as being filed
-                                    },
-                                    Message::Cancel(c) => {},
-                                    Message::Port(_p) => {
-                                        // we dont support DHT so we can ignore this message
-                                    },
-                                    Message::Unknown => {
-                                        log::error!("Received unknown message type.");
-                                    },
-                                }
-                            }
+                            Message::Request(r) => {
+                                // check if we have the piece then send it if we do and if we arent
+                                // choking this peer
+                            },
+                            Message::Piece(p) => {
+                                piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
+                                // TODO: mark the bounds of this section as being filed
+                            },
+                            Message::Cancel(c) => {},
+                            Message::Port(_p) => {
+                                // we dont support DHT so we can ignore this message
+                            },
+                            Message::Unknown => {
+                                log::error!("Received unknown message type.");
+                            },
                         }
                     }
+                    Err(e) => Err(e)?,
                 }
             },
+            Some(new_peer) = rx.recv() => {
+                incoming_stream = Some(new_peer);
+            }
+            Some(_) = readable_tcpstream(&incoming_stream) => {
+                let Some(ref s) = incoming_stream else { continue };
+                // our peer is making a request or sending an update
+            }
             _ = delay => {
-                // debug!("Reselected delay");
                 // if we arent currently waiting for a reponse back from our peer and they arent
                 // choking us then claim one of the next rarest pieces and request it.
-                if !waiting && !peer.peer_choking {
-                    let mut info = pieces_info.lock().unwrap();
-                    // this is not rarest first, just random TODO: make rarest first
-                    let p = info.iter().enumerate().filter(|&(_, p)| p.status == PieceStatus::NotRequested).take(4).choose(&mut rand::rng());
-                    match p {
-                        Some((i, p)) => {
-                            info[i].status = PieceStatus::Requested;
-                            if let Ok(bytes_written) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) {
-                                peer.out_stream.write(&stream_buf[..bytes_written]);
-                            }
-                            waiting = true;
-                        },
-                        None => {
-                            // we have downloaded all pieces so no need to send anything
-                        }
-                    }
-                }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
                 // another task has a chance to claim it
-                // TODO
                 continue;
             },
         }
     }
-}
-
-#[derive(Debug)]
-pub enum DoHandshakeError {
-    BadRead,
-    BadWrite,
-    BadProtocolString,
-    BadPeerId,
-    DuplicatePeerId,
-    BadHashId,
-    FailedLock,
-    TooManyPeers
-}
-
-async fn do_incoming_handshake(
-    stream: &mut TcpStream,
-    peer_addr: SocketAddr,
-    info_hash: HashedId20,
-    peer_id: Option<PeerId20>,
-    handshake_msg: BytesMut,
-    known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
-) -> Result<(), DoHandshakeError> {
-    debug!("Handling an incoming handshake from {}", peer_addr);
-    // do that
-    // receive their handshake not including peer_id and make sure the info_hash matches
-    let mut their_handshake = [0u8; HANDSHAKE_LEN - 20]; // -20 for peer-id
-    let res = stream.read_exact(&mut their_handshake).await;
-    if let Err(e) = res {
-        error!("Could not read start of handshake: {e}");
-        return Err(DoHandshakeError::BadRead);
-    }
-    debug!("Read first bit of handshake from {}", peer_addr);
-
-    // pstr handling
-    let pstrlen = their_handshake[0] as usize;
-    let pstr = &their_handshake[1..1 + pstrlen];
-    if pstr != PROTOCOL_V_1 {
-        error!("Expected protocol {:?}, got protocol {:?}", PROTOCOL_V_1, pstr);
-        return Err(DoHandshakeError::BadProtocolString);
-    }
-
-    debug!("Confirmed protocol from {}", peer_addr);
-
-    // their_handshake[1 + pstrlen..1 + pstrlen + 8] is the reserved bits which we ignore
-
-    // info_hash handling
-    let received_info_hash = &their_handshake[1 + pstrlen + 8..1 + pstrlen + 8 + 20];
-    if received_info_hash != info_hash {
-        error!("Expected info_hash {:?}, got info_hash {:?}", info_hash, received_info_hash);
-        return Err(DoHandshakeError::BadHashId);
-    }
-
-    debug!("Confirmed info_hash from {}", peer_addr);
-
-    // send a handshake
-    let res = stream.write_all(&handshake_msg).await;
-    if let Err(e) = res {
-        error!("Could not write handshake: {e}");
-        return Err(DoHandshakeError::BadWrite);
-    }
-
-    debug!("Sent handshake to {}", peer_addr);
-
-    // receive and check their peer_id against known_peers to check if we need to close the connection
-    let mut their_id = [0u8; 20]; // 20 for peer-id
-    let res = stream.read_exact(&mut their_id).await;
-    if let Err(e) = res {
-        error!("Could not read peer_id: {e}");
-        return Err(DoHandshakeError::BadRead);
-    }
-    let their_id: PeerId20 = their_id.try_into().map_err(|_| DoHandshakeError::BadPeerId)?;
-
-    debug!("Got peer_id from {}", peer_addr);
-
-    // make sure no duplicate connections
-    match known_peers.lock() {
-        Err(e) => {
-            error!("Could not get lock on known_peers: {e}");
-            return Err(DoHandshakeError::FailedLock);
-        }
-        Ok(mut known_peers_writer) => {
-            if known_peers_writer.contains_key(&their_id) {
-                debug!("Already connected to id={:?}, {}", &their_id, peer_addr);
-                drop(known_peers_writer);
-                return Err(DoHandshakeError::DuplicatePeerId);
-            } else if known_peers_writer.len() >= 55 {
-                debug!("Already connected to 55 peers, {}", peer_addr);
-                drop(known_peers_writer);
-                return Err(DoHandshakeError::TooManyPeers);
-            }
-            debug!("This peer id={:?} was not a known peer {}", &their_id, peer_addr);
-            known_peers_writer.insert(their_id, peer_addr);
-            drop(known_peers_writer);
-        }
-    }
-
-    Ok(())
-}
-
-async fn do_outgoing_handshake(
-    stream: &mut TcpStream,
-    peer_addr: SocketAddr,
-    info_hash: HashedId20,
-    peer_id: Option<PeerId20>,
-    mut handshake_msg: BytesMut,
-    known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
-) -> Result<(), DoHandshakeError> {
-    debug!("Handling an outgoing handshake to {}", peer_addr);
-    // do that
-    // send them a handshake
-    let res = stream.write_all(&handshake_msg).await;
-    if let Err(e) = res {
-        error!("Could not write handshake: {e}");
-        return Err(DoHandshakeError::BadWrite);
-    }
-
-    // receive their handshake
-    let mut their_handshake = [0u8; HANDSHAKE_LEN];
-    let res = stream.read_exact(&mut their_handshake).await;
-    if let Err(e) = res {
-        error!("Could not read handshake: `{e}` from peer {:?}", peer_id);
-        return Err(DoHandshakeError::BadRead);
-    }
-    debug!("Read the handshake from {}", peer_addr);
-
-    // pstr handling
-    let pstrlen = their_handshake[0] as usize;
-    let pstr = &their_handshake[1..1 + pstrlen];
-    if pstr != PROTOCOL_V_1 {
-        error!("Expected protocol {:?}, got protocol {:?}", PROTOCOL_V_1, pstr);
-        return Err(DoHandshakeError::BadProtocolString);
-    }
-
-    debug!("Confirmed protocol from {}", peer_addr);
-
-    // their_handshake[1 + pstrlen..1 + pstrlen + 8] is the reserved bits which we ignore
-
-    // info_hash handling
-    let received_info_hash = &their_handshake[1 + pstrlen + 8..1 + pstrlen + 8 + 20];
-    if received_info_hash != info_hash {
-        error!("Expected info_hash {:?}, got info_hash {:?}", info_hash, received_info_hash);
-        return Err(DoHandshakeError::BadHashId);
-    }
-
-    debug!("Confirmed info_hash from {}", peer_addr);
-
-    // peer_id handling
-    let their_id_bytes = &their_handshake[1 + pstrlen + 8 + 20..];
-    let their_id: PeerId20 = their_id_bytes.try_into().map_err(|_| DoHandshakeError::BadPeerId)?;
-
-    debug!("Got peer_id from {}", peer_addr);
-    if let Some(expected_peer_id) = peer_id {
-        if expected_peer_id != their_id {
-            error!("Got peer_id {:?}, but expected \nid {:?}", their_id, expected_peer_id);
-        } // caller makes sure we aren't connecting to self
-    }
-
-    // make sure no duplicate connections
-    match known_peers.lock() {
-        Err(e) => {
-            error!("Could not get read lock on known_peers: {e}");
-            return Err(DoHandshakeError::FailedLock);
-        }
-        Ok(mut known_peers_writer) => {
-            if known_peers_writer.contains_key(&their_id) {
-                debug!("Already connected to id={:?}, {}", &their_id, peer_addr);
-                drop(known_peers_writer);
-                return Err(DoHandshakeError::DuplicatePeerId);
-            }
-            debug!("This peer id={:?} was not a known peer, good, allowing connection! {}", &their_id, peer_addr);
-            known_peers_writer.insert(their_id, peer_addr);
-            drop(known_peers_writer);
-        }
-    }
-
-    Ok(())
 }
 
 async fn readable_tcpstream(stream: &Option<TcpStream>) -> Option<()> {
@@ -871,7 +655,7 @@ async fn readable_tcpstream(stream: &Option<TcpStream>) -> Option<()> {
 #[derive(Debug)]
 pub struct ConnectedPeer {
     pub addr: SocketAddr,
-    pub id: Option<PeerId20>,
+    pub id: Option<Vec<u8>>,
     pub out_stream: TcpStream,
     pub in_stream: Option<TcpStream>,
 

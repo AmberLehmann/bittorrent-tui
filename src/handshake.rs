@@ -1,6 +1,6 @@
 use bytes::{BufMut, BytesMut};
 
-use crate::{HashedId20, PeerId20, HANDSHAKE_LEN, PROTOCOL_V_1};
+use crate::{HashedId20, PeerId20};
 
 pub struct Handshake {
     info_hash: HashedId20,
@@ -13,9 +13,9 @@ impl Handshake {
     }
 
     pub fn serialize_handshake(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(HANDSHAKE_LEN);
+        let mut buf = BytesMut::with_capacity(68);
         buf.put_u8(19);
-        buf.put_slice(PROTOCOL_V_1);
+        buf.put_slice(b"BitTorrent protocol");
         buf.put_u64(0); // Reserved
         buf.put(&self.info_hash[..]);
         buf.put(&self.peer_id[..]);
