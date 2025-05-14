@@ -6,6 +6,10 @@ use crate::{
     tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20, PeerId20,
 };
+use bitvec::{
+    order::Msb0,
+    prelude::{BitSlice, BitVec},
+};
 use bytes::{Buf, BytesMut};
 use log::{debug, error, info};
 use rand::{distr::Alphanumeric, random_range, Rng};
@@ -508,6 +512,12 @@ pub async fn handle_torrent(
     //Ok(())
 }
 
+enum PeerMsg {
+    Closed,
+    Have(u32),
+    Field(BitVec<u8, Msb0>),
+}
+
 // needs some way for the main thread to signal that this task should be cancled. needs signal to
 // ensure this task does not hold the lock or maybe just ensuring that the lock is released before
 // the next await is enough?
@@ -518,7 +528,7 @@ async fn peer_handler(
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
     pieces_data: Arc<Vec<RwLock<Vec<u8>>>>,
     mut handshake_msg: BytesMut,
-    tx: UnboundedSender<()>,
+    tx: UnboundedSender<PeerMsg>,
     mut rx: UnboundedReceiver<TcpStream>,
 ) -> Result<(), tokio::io::Error> {
     let mut peer = ConnectedPeer {
@@ -530,7 +540,7 @@ async fn peer_handler(
         peer_choking: true,
         am_interested: false,
         peer_interested: false,
-        bitfield: Vec::new(),
+        bitfield: BitVec::new(),
         upload_rate: 0.0,
         download_rate: 0.0,
     };
@@ -566,8 +576,6 @@ async fn peer_handler(
     // go into main loop
     let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
-    // let interested_msg = [0x00, 0x00, 0x00, 0x01, 0x02];
-    // outgoing_stream.write_all(&interested_msg).await?;
     loop {
         let delay = interval.tick();
         tokio::select! {
@@ -581,6 +589,7 @@ async fn peer_handler(
                     Ok(0) => {
                         // stream has likely been closed
                         debug!("Stream closed");
+                        let _ = tx.send(PeerMsg::Closed);
                         return Ok(());
                     }
                     Ok(bytes_read) => {
@@ -598,9 +607,12 @@ async fn peer_handler(
                             Message::NotInterested => peer.peer_interested = false,
                             Message::Have(h) => {
                                 // update global torrent piece map
+                                let _ = tx.send(PeerMsg::Have(h.piece_index));
                             },
                             Message::Bitfield(b) => {
                                 // update global torrent piece map
+                                peer.bitfield = b.bitfield.to_bitvec();
+                                let _ = tx.send(PeerMsg::Field(peer.bitfield.clone()));
                             },
                             Message::Request(r) => {
                                 // check if we have the piece then send it if we do and if we arent
@@ -657,7 +669,7 @@ pub struct ConnectedPeer {
     pub peer_choking: bool,
     pub peer_interested: bool,
 
-    pub bitfield: Vec<u8>,
+    pub bitfield: BitVec<u8, Msb0>,
     pub upload_rate: f64,
     pub download_rate: f64,
 }
