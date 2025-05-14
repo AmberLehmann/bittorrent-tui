@@ -15,7 +15,7 @@ mod tui;
 pub type PeerId20 = [u8; 20];
 pub type HashedId20 = [u8; 20];
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), std::io::Error> {
     // let args = Args::parse();
     let mut terminal = ratatui::init();

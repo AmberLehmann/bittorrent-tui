@@ -73,7 +73,7 @@ impl Display for TrackerRequestEvent {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TrackerRequest {
     pub info_hash: HashedId20,
     pub peer_id: PeerId20,
@@ -132,17 +132,17 @@ impl TrackerRequest {
             write!(buf, "&trackerid={t}").unwrap();
         }
         buf.put_slice(b" HTTP/1.1\r\n");
-
         write!(buf, "Host: {}\r\n", announce).unwrap();
         buf.put_slice(b"User-Agent: RustTorrent/1.0\r\n");
-
         buf.put_slice(b"Connection: close\r\n");
-
         buf.put_slice(b"\r\n");
-
-        log::debug!("Encoded HTTP GET: {:?}", buf);
-
         buf
+    }
+    pub fn gen_periodic_req(&mut self, uploaded: u64, downloaded: u64, left: u64) {
+        self.event = None;
+        self.uploaded = uploaded;
+        self.downloaded = downloaded;
+        self.left = left;
     }
 }
 
@@ -162,6 +162,21 @@ pub struct TrackerResponse {
     pub incomplete: u64,
     #[serde(deserialize_with = "deserialize_peers")]
     pub peers: Vec<PeerInfo>,
+}
+
+impl TrackerResponse {
+    pub fn new(buf: &mut [u8]) -> Result<Self, TrackerError> {
+        let header_end = match buf.windows(4).position(|window| window == b"\r\n\r\n") {
+            Some(pos) => pos + 4, // Account for \r\n\r\n
+            None => return Err(TrackerError::MalformedHttpResponse),
+        };
+        let response: TrackerResponse = bendy::serde::from_bytes(&buf[header_end..])?;
+        trace!(
+            "Tracker response received: client assigned {} peers.",
+            response.peers.len()
+        );
+        Ok(response)
+    }
 }
 
 #[derive(Debug)]
