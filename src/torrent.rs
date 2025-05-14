@@ -532,11 +532,13 @@ async fn peer_handler(
     if is_outgoing {
         if let Err(e) = do_outgoing_handshake(&mut peer.out_stream, addr, info_hash, peer_id, handshake_msg, Arc::clone(&known_peers)).await {
             error!("Handshake error, returning from peer_handler");
+            // close socket!!!! TODO
             return Err(tokio::io::Error::new(tokio::io::ErrorKind::Other, format!("Handshake failed")));
         }
     } else {
         if let Err(e) = do_incoming_handshake(&mut peer.out_stream, addr, info_hash, peer_id, handshake_msg, Arc::clone(&known_peers)).await {
             error!("Handshake error, returning from peer_handler");
+            // close socket!!!! TODO
             return Err(tokio::io::Error::new(tokio::io::ErrorKind::Other, format!("Handshake failed")));
         }
     }
@@ -551,6 +553,7 @@ async fn peer_handler(
         let delay = interval.tick();
         tokio::select! {
             _ = peer.out_stream.readable() => {
+                // debug!("Reselected peer.out_stream.readable()");
                 // NOTE: we use several awaits here
                 // *must make sure all locks are let go!*
 
@@ -576,7 +579,8 @@ async fn peer_handler(
                         return Ok(());
                     }
                     Ok(Ok(n)) if n < 4 => {
-                        debug!("not enough data to read message length: {n} bytes available");
+                        // debug!("not enough data to read message length: {n} bytes available");  // idk can just comment this out lol
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // idk can just comment this out lol
                         continue;
                     }
                     Ok(Ok(_)) => {
@@ -597,7 +601,8 @@ async fn peer_handler(
                                 continue;
                             }
                             Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                                debug!("would block poll on read v2: {e}");
+                                debug!("would block poll on read v2: {e}"); // idk can just comment this out lol
+                                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // idk can just comment this out lol
                                 continue;
                             },
                             Ok(Err(e)) => {
@@ -648,6 +653,7 @@ async fn peer_handler(
                 }
             },
             _ = delay => {
+                // debug!("Reselected delay");
                 // if we arent currently waiting for a reponse back from our peer and they arent
                 // choking us then claim one of the next rarest pieces and request it.
                 if !waiting && !peer.peer_choking {
@@ -795,7 +801,7 @@ async fn do_outgoing_handshake(
     let mut their_handshake = [0u8; HANDSHAKE_LEN];
     let res = stream.read_exact(&mut their_handshake).await;
     if let Err(e) = res {
-        error!("Could not read handshake: {e}");
+        error!("Could not read handshake: `{e}` from peer {:?}", peer_id);
         return Err(DoHandshakeError::BadRead);
     }
     debug!("Read first bit of handshake from {}", peer_addr);
@@ -828,7 +834,7 @@ async fn do_outgoing_handshake(
     debug!("Got peer_id from {}", peer_addr);
     if let Some(expected_peer_id) = peer_id {
         if expected_peer_id != their_id {
-            error!("Got peer_id {:?}, but expected id {:?}", their_id, expected_peer_id);
+            error!("Got peer_id {:?}, but expected \nid {:?}", their_id, expected_peer_id);
         } // caller makes sure we aren't connecting to self
     }
 
@@ -844,7 +850,7 @@ async fn do_outgoing_handshake(
                 drop(known_peers_writer);
                 return Err(DoHandshakeError::DuplicatePeerId);
             }
-            debug!("This peer id={:?} was not a known peer {}", &their_id, peer_addr);
+            debug!("This peer id={:?} was not a known peer, good, allowing connection! {}", &their_id, peer_addr);
             known_peers_writer.insert(their_id, peer_addr);
             drop(known_peers_writer);
         }

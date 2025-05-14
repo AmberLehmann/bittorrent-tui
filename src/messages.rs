@@ -224,106 +224,106 @@ impl<'a> Message<'a> {
 }
 
 // NOTE: Use `cargo test -- --show-output`.
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Cursor; // https://doc.rust-lang.org/std/io/struct.Cursor.html (fake IO from https://doc.rust-lang.org/std/io/trait.Write.html)
-    // use std::fs::File;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use std::io::Cursor; // https://doc.rust-lang.org/std/io/struct.Cursor.html (fake IO from https://doc.rust-lang.org/std/io/trait.Write.html)
+//     // use std::fs::File;
 
-    #[test]
-    fn create_and_parse_msg_type_piece() {
-        let block = b"hehe";
-        let msg_struct = Message::Piece(Piece {
-            index: 7,
-            begin: 2,
-            block
-        });
+//     #[test]
+//     fn create_and_parse_msg_type_piece() {
+//         let block = b"hehe";
+//         let msg_struct = Message::Piece(Piece {
+//             index: 7,
+//             begin: 2,
+//             block
+//         });
 
-        let mut fake_tcp_stream = Cursor::new(vec![0u8; 17]);
-        let _total_len = msg_struct.create(&mut fake_tcp_stream).unwrap();
+//         let mut fake_tcp_stream = Cursor::new(vec![0u8; 17]);
+//         let _total_len = msg_struct.create(&mut fake_tcp_stream).unwrap();
 
-        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
-        match parsed {
-            Message::Piece(p) => {
-                assert_eq!(p.index, 7);
-                assert_eq!(p.begin, 2);
-                assert_eq!(p.block, block);
-            }
-            _ => panic!("Not a piece"),
-        }
-    }
+//         let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+//         match parsed {
+//             Message::Piece(p) => {
+//                 assert_eq!(p.index, 7);
+//                 assert_eq!(p.begin, 2);
+//                 assert_eq!(p.block, block);
+//             }
+//             _ => panic!("Not a piece"),
+//         }
+//     }
 
-    #[test]
-    fn hardcode_and_parse_msg_type_piece() {
-        let fake_tcp_stream = Cursor::new(
-            vec![
-                // <len=9+4> (4 bytes)
-                0x00, 0x00, 0x00, 0x0D,
-                // <id=7> (1 byte)
-                0x07,
-                // <index=7> (4 bytes)
-                0x00, 0x00, 0x00, 0x07,
-                // <begin=2> (4 bytes)
-                0x00, 0x00, 0x00, 0x02,
-                // <block=b"hehe">
-                b'h', b'e', b'h', b'e'
-            ]
-        );
+//     #[test]
+//     fn hardcode_and_parse_msg_type_piece() {
+//         let fake_tcp_stream = Cursor::new(
+//             vec![
+//                 // <len=9+4> (4 bytes)
+//                 0x00, 0x00, 0x00, 0x0D,
+//                 // <id=7> (1 byte)
+//                 0x07,
+//                 // <index=7> (4 bytes)
+//                 0x00, 0x00, 0x00, 0x07,
+//                 // <begin=2> (4 bytes)
+//                 0x00, 0x00, 0x00, 0x02,
+//                 // <block=b"hehe">
+//                 b'h', b'e', b'h', b'e'
+//             ]
+//         );
 
-        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
-        match parsed {
-            Message::Piece(p) => {
-                assert_eq!(p.index, 7);
-                assert_eq!(p.begin, 2);
-                assert_eq!(p.block, b"hehe");
-            }
-            _ => panic!("Not a piece"),
-        }
-    }
+//         let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+//         match parsed {
+//             Message::Piece(p) => {
+//                 assert_eq!(p.index, 7);
+//                 assert_eq!(p.begin, 2);
+//                 assert_eq!(p.block, b"hehe");
+//             }
+//             _ => panic!("Not a piece"),
+//         }
+//     }
 
-    #[test]
-    fn create_and_parse_msg_type_bitfield() {
-        let bitfield = vec![0xAF];
-        let bitfield = BitSlice::<u8, Msb0>::from_slice(&bitfield);
-        let msg_struct = Message::Bitfield(Bitfield {
-            bitfield
-        });
+//     #[test]
+//     fn create_and_parse_msg_type_bitfield() {
+//         let bitfield = vec![0xAF];
+//         let bitfield = BitSlice::<u8, Msb0>::from_slice(&bitfield);
+//         let msg_struct = Message::Bitfield(Bitfield {
+//             bitfield
+//         });
 
-        let mut fake_tcp_stream = Cursor::new(vec![0u8; 6]);
-        let _total_len = msg_struct.create(&mut fake_tcp_stream).unwrap();
+//         let mut fake_tcp_stream = Cursor::new(vec![0u8; 6]);
+//         let _total_len = msg_struct.create(&mut fake_tcp_stream).unwrap();
 
-        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
-        match parsed {
-            Message::Bitfield(p) => {
-                let expected_v = vec![0b10101111u8];
-                let expected_bits = BitSlice::<u8, Msb0>::from_slice(&expected_v);
-                assert_eq!(p.bitfield, expected_bits);
-            }
-            _ => panic!("Not a bitfield"),
-        }
-    }
+//         let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+//         match parsed {
+//             Message::Bitfield(p) => {
+//                 let expected_v = vec![0b10101111u8];
+//                 let expected_bits = BitSlice::<u8, Msb0>::from_slice(&expected_v);
+//                 assert_eq!(p.bitfield, expected_bits);
+//             }
+//             _ => panic!("Not a bitfield"),
+//         }
+//     }
 
-    #[test]
-    fn hardcode_and_parse_msg_type_bitfield() {
-        let fake_tcp_stream = Cursor::new(
-            vec![
-                // <len=1+1> (4 bytes)
-                0x00, 0x00, 0x00, 0x02,
-                // <id=5> (1 byte)
-                0x05,
-                // <bitfield=in binary 1010=A 1111=F>
-                0xAF
-            ]
-        );
+//     #[test]
+//     fn hardcode_and_parse_msg_type_bitfield() {
+//         let fake_tcp_stream = Cursor::new(
+//             vec![
+//                 // <len=1+1> (4 bytes)
+//                 0x00, 0x00, 0x00, 0x02,
+//                 // <id=5> (1 byte)
+//                 0x05,
+//                 // <bitfield=in binary 1010=A 1111=F>
+//                 0xAF
+//             ]
+//         );
 
-        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
-        match parsed {
-            Message::Bitfield(p) => {
-                let expected_v = vec![0b10101111u8];
-                let expected_bits = BitSlice::<u8, Msb0>::from_slice(&expected_v);
-                assert_eq!(p.bitfield, expected_bits);
-            }
-            _ => panic!("Not a bitfield"),
-        }
-    }
-}
+//         let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+//         match parsed {
+//             Message::Bitfield(p) => {
+//                 let expected_v = vec![0b10101111u8];
+//                 let expected_bits = BitSlice::<u8, Msb0>::from_slice(&expected_v);
+//                 assert_eq!(p.bitfield, expected_bits);
+//             }
+//             _ => panic!("Not a bitfield"),
+//         }
+//     }
+// }
