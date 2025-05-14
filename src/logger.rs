@@ -6,6 +6,8 @@ use ratatui::{
     widgets::{Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
+pub const LEVELS: [&'static str; 5] = ["WARN", "ERROR", "INFO", "DEBUG", "TRACE"];
+
 pub struct Logger {
     pub client: std::sync::mpsc::Sender<(Level, String)>,
 }
@@ -50,7 +52,7 @@ impl Log for Logger {
 }
 
 pub struct LogTab {
-    text: Vec<(Level, String)>,
+    pub text: Vec<(Level, String)>,
     offset: usize,
     spans: [Span<'static>; 5],
 }
@@ -67,8 +69,8 @@ impl LogTab {
             text: Vec::new(),
             offset: 0,
             spans: [
-                Span::styled("ERROR", Color::LightRed),
                 Span::styled("WARN", Color::Yellow),
+                Span::styled("ERROR", Color::LightRed),
                 Span::styled("INFO", Color::Green),
                 Span::styled("DEBUG", Color::White),
                 Span::styled("TRACE", Color::White),
