@@ -561,20 +561,20 @@ async fn peer_handler(
                 // timeout on reads is 2 seconds now
                 match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.peek(&mut len_buf)).await {
                     Err(e) => {
-                        debug!("would block poll on peek v1: {e}");
+                        debug!("would block poll on peek v1: {e}, {addr}");
                         continue;
                     }
                     Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        debug!("would block poll on peek v2: {e}");
+                        debug!("would block poll on peek v2: {e}, {addr}");
                         continue;
                     },
                     Ok(Err(e)) => {
-                        error!("peek error: {e}");
+                        error!("peek error: {e}, {addr}");
                         return Err(e);
                     },
                     Ok(Ok(0)) => {
                         // stream has likely been closed
-                        debug!("Stream closed");
+                        debug!("Stream closed, {addr}");
                         let _ = tx.send(PeerMsg::Closed);
                         return Ok(());
                     }
@@ -586,33 +586,35 @@ async fn peer_handler(
                     Ok(Ok(_)) => {
                         // read len_buf
                         let msg_len = (NetworkEndian::read_u32(&len_buf) as usize) + 4;
+                        debug!("Read msg_len - 4 as {}, {addr}", msg_len - 4);
                         // prepare to consume at least that much
-                        if stream_buf.len() < msg_len + 4 {
-                            stream_buf.resize(msg_len + 4, 0u8);
+                        if stream_buf.len() < msg_len {
+                            stream_buf.resize(msg_len, 0u8);
                         }
+                        debug!("stream_buf[0..msg_len].len() = {}, {addr}", stream_buf[0..msg_len].len());
 
                         // must read in exactly that many bytes, otherwise
                         // will overread stream (TCP, not UDP)
                         // so read into a slice of a certain size? i think that should be fine
                         // timeout on reads is 2 seconds now
-                        match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.read_exact(&mut (stream_buf[0..msg_len+4]))).await {
+                        match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.read_exact(&mut (stream_buf[0..msg_len]))).await {
                             Err(e) => {
-                                debug!("would block poll on read v1: {e}");
+                                debug!("would block poll on read v1: {e}, {addr}");
                                 continue;
                             }
                             Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                                debug!("would block poll on read v2: {e}"); // idk can just comment this out lol
+                                debug!("would block poll on read v2: {e}, {addr}"); // idk can just comment this out lol
                                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // idk can just comment this out lol
                                 continue;
                             },
                             Ok(Err(e)) => {
-                                error!("read error: {e}");
+                                error!("read error: {e}, {addr}");
                                 return Err(e);
                             },
                             Ok(Ok(_bytes_read)) => {
                                 // parse and handle response message from peer
                                 let Ok(msg) = Message::parse(&(stream_buf[0..msg_len+4])) else { continue };
-                                debug!("read {msg:?}");
+                                debug!("read {msg:?}, {addr}");
 
                                 // not every message can be recieved from this connection but good to
                                 // include them anyways
@@ -804,7 +806,7 @@ async fn do_outgoing_handshake(
         error!("Could not read handshake: `{e}` from peer {:?}", peer_id);
         return Err(DoHandshakeError::BadRead);
     }
-    debug!("Read first bit of handshake from {}", peer_addr);
+    debug!("Read the handshake from {}", peer_addr);
 
     // pstr handling
     let pstrlen = their_handshake[0] as usize;
