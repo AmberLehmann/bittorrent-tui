@@ -618,6 +618,9 @@ async fn peer_handler(
                             Message::Port(_p) => {
                                 // we dont support DHT so we can ignore this message
                             },
+                            Message::Unknown => {
+                                log::error!("Received unknown message type.");
+                            },
                         }
                     }
                     Err(e) => Err(e)?,

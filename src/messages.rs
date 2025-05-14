@@ -129,7 +129,7 @@ impl<'a> Message<'a> {
         Ok(size as usize)
     }
 
-    pub fn parse(buf: &'a [u8]) -> Result<(Self, &'a [u8])> {
+    pub fn parse(buf: &'a [u8]) -> Result<Self> {
         if buf.len() < 4 {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof, 
@@ -137,10 +137,10 @@ impl<'a> Message<'a> {
             ));
         }
         let size = NetworkEndian::read_u32(&buf[0..4]);
-        if buf.len() < 4 + (size as usize) {
+        if buf.len() != 4 + (size as usize) {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof, 
-                format!("Message shorter than expected. expected {}, got {}", 4 + (size as usize), buf.len())
+                format!("Message length different than expected. expected {}, got {}", 4 + (size as usize), buf.len())
             ));
         }
 
@@ -212,7 +212,7 @@ impl<'a> Message<'a> {
             }
         };
 
-        Ok((msg, &buf[4 + (size as usize)..])) // return message + remaining buffer
+        Ok(msg) // return message + remaining buffer
     }
 }
 
@@ -232,21 +232,18 @@ mod tests {
             block
         });
 
-        let mut fake_tcp_stream = Cursor::new(vec![0u8; 40]);
+        let mut fake_tcp_stream = Cursor::new(vec![0u8; 17]);
         let _total_len = msg_struct.create(&mut fake_tcp_stream).unwrap();
 
-        let (parsed, leftover) = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
         match parsed {
             Message::Piece(p) => {
                 assert_eq!(p.index, 7);
                 assert_eq!(p.begin, 2);
                 assert_eq!(p.block, block);
             }
-            _ => panic!("Parsed message is not a Piece"),
+            _ => panic!("Not a piece"),
         }
-
-        // should be length 4 + 9 + X where X is 4, buffer was originally 40, so
-        assert_eq!(leftover.len(), 40 - (4+9+4));
     }
 
     #[test]
@@ -266,17 +263,15 @@ mod tests {
             ]
         );
 
-        let (parsed, leftover) = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
         match parsed {
             Message::Piece(p) => {
                 assert_eq!(p.index, 7);
                 assert_eq!(p.begin, 2);
                 assert_eq!(p.block, b"hehe");
             }
-            _ => panic!("Parsed message is not a Piece"),
+            _ => panic!("Not a piece"),
         }
-
-        assert_eq!(leftover.len(), 0);
     }
 
     #[test]
@@ -287,21 +282,18 @@ mod tests {
             bitfield
         });
 
-        let mut fake_tcp_stream = Cursor::new(vec![0u8; 40]);
+        let mut fake_tcp_stream = Cursor::new(vec![0u8; 6]);
         let _total_len = msg_struct.create(&mut fake_tcp_stream).unwrap();
 
-        let (parsed, leftover) = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
         match parsed {
             Message::Bitfield(p) => {
                 let expected_v = vec![0b10101111u8];
                 let expected_bits = BitSlice::<u8, Msb0>::from_slice(&expected_v);
                 assert_eq!(p.bitfield, expected_bits);
             }
-            _ => panic!("Parsed message is not a Bitfield"),
+            _ => panic!("Not a bitfield"),
         }
-
-        // should be length 4 + 1 + X where X is 1, buffer was originally 40, so
-        assert_eq!(leftover.len(), 40 - (4+1+1));
     }
 
     #[test]
@@ -317,16 +309,14 @@ mod tests {
             ]
         );
 
-        let (parsed, leftover) = Message::parse(fake_tcp_stream.get_ref()).unwrap();
+        let parsed = Message::parse(fake_tcp_stream.get_ref()).unwrap();
         match parsed {
             Message::Bitfield(p) => {
                 let expected_v = vec![0b10101111u8];
                 let expected_bits = BitSlice::<u8, Msb0>::from_slice(&expected_v);
                 assert_eq!(p.bitfield, expected_bits);
             }
-            _ => panic!("Parsed message is not a Bitfield"),
+            _ => panic!("Not a bitfield"),
         }
-
-        assert_eq!(leftover.len(), 0);
     }
 }
