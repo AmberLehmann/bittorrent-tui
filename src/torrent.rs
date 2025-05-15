@@ -20,6 +20,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs::File,
+    io::Cursor,
     io::Read,
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
@@ -708,8 +709,9 @@ async fn peer_handler(
 
                     let Some(len) = bytes_written else { continue };
                     info!("requesting piece from {} ", peer.addr);
-                    let bytes_written = peer.out_stream.write_all(&stream_buf[..len]).await;
-                    debug!("write returned {:?}", bytes_written);
+                    let bytes_written = (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await;
+                    peer.out_stream.flush().await?;
+                    debug!("write returned {:?}, wrote {}", bytes_written, len);
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
