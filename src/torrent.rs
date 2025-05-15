@@ -13,7 +13,7 @@ use bitvec::{
 };
 use byteorder::{ByteOrder, NetworkEndian};
 use bytes::{Buf, BytesMut};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use rand::{
     distr::Alphanumeric, random_range, seq::index::sample_weighted, seq::IteratorRandom, Rng,
 };
@@ -23,8 +23,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs::File,
-    io::Cursor,
-    io::Read,
+    io::{Cursor, Read, Write},
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
     task::{Context, Poll},
@@ -539,6 +538,17 @@ pub async fn handle_torrent(
                         info!("downloaded piece {}, {}/{}", i, pieces_downloaded, torrent.pieces_data.len());
                     },
                 }
+                if pieces_downloaded == torrent.pieces_data.len() {
+                    let mut f = match torrent.meta_info.info {
+                        Info::Single(ref f) => File::create(&f.name),
+                        Info::Multi(_) => panic!(),
+                    }?;
+
+                    for p_lock in torrent.pieces_data.iter() {
+                        let p = p_lock.read().unwrap();
+                        f.write_all(&*p)?;
+                    }
+                }
             }
             _ = delay => {
                 // debug!("delay selected");
@@ -980,14 +990,15 @@ async fn peer_handler(
                                             // TODO: hashing
                                             let id = hash_buffer(&piece_buf);
                                             let Some(ref mut pi) = &mut requested else { continue };
-                                            if pi.1.hash != id {
-                                                {
-                                                    let mut info = pieces_info.lock().unwrap();
-                                                    info[pi.0].status = PieceStatus::NotRequested;
-                                                }
-                                                requested = None;
-                                                continue;
-                                            }
+                                            //if pi.1.hash != id {
+                                            //    {
+                                            //        let mut info = pieces_info.lock().unwrap();
+                                            //        info[pi.0].status = PieceStatus::NotRequested;
+                                            //    }
+                                            //    requested = None;
+                                            //    warn!("Hash did not match");
+                                            //    continue;
+                                            //}
                                             let mut wr = pieces_data[pi.0].write().unwrap();
                                             *wr = std::mem::take(&mut piece_buf);
                                             piece_buf = vec![0u8; piece_size];
