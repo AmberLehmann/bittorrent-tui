@@ -421,7 +421,7 @@ pub async fn handle_torrent(
     let mut buf = BytesMut::with_capacity(1024);
     loop {
         let delay = interval.tick();
-        // TODO: make actually async like peer_handler
+        // TODO: make actually async like peer_handler?
         tokio::select! {
             tracker_resp = tracker_stream.read_buf(&mut buf) => {
                 match tracker_resp {
@@ -950,4 +950,11 @@ pub struct ConnectedPeer {
     pub bitfield: BitVec<u8, Msb0>,
     pub upload_rate: f64,
     pub download_rate: f64,
+}
+
+#[derive(Debug)]
+enum PeerCommand {
+    Choke,
+    Unchoke,
+    Kill
 }

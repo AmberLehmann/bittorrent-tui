@@ -1,11 +1,11 @@
-Prajwal-
-Adjusting Hasher to be for 20bytes
+- Prajwal
+  - Adjusting Hasher to be for 20bytes
 
 - Thomas
-    - UI
-    - Metainfo/Torrent deserialization
-    - fixing hasher adjustment
-    - logging
+  - UI
+  - Metainfo/Torrent deserialization
+  - fixing hasher adjustment
+  - logging
 
 - Amber 
   - TrackerRequest/Response methods + deserialization
@@ -18,3 +18,10 @@ Adjusting Hasher to be for 20bytes
   - Fixed bug where connection with peer would immediately close after handshake
   - Fixed deserialization function for TrackerResponse to handle older torrent formats
 
+- Maya
+  - Created message type (de)serialization + tests
+  - Update metainfo deserialization to properly get peer_ids
+  - Update handshaking to allow for incoming peers and filter improper/duplicate handshakes
+  - Update incoming data handling to deal with framed data in streams
+  - Fixed bug where sent data was sending improper packet sizes
+  
