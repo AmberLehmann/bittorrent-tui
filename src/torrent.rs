@@ -864,7 +864,7 @@ async fn peer_handler(
     // randomized timeout
     let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
-    let mut tui_interval = tokio::time::interval(Duration::from_millis(500));
+    let mut tui_interval = tokio::time::interval(Duration::from_millis(100));
     loop {
         let delay = interval.tick();
         let tui_update_delay = tui_interval.tick();
@@ -877,7 +877,7 @@ async fn peer_handler(
                 // either respond to request or
                 // timeout on reads is 2 seconds now
                 match timeout(
-                    tokio::time::Duration::from_millis(500),
+                    tokio::time::Duration::from_millis(100),
                     peer.out_stream.peek(&mut len_buf)
                 ).await {
                     Err(e) => {
