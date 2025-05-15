@@ -157,7 +157,7 @@ impl<'a> Message<'a> {
             }
         }
 
-        Ok(NetworkEndian::read_u32(buf) as usize)
+        Ok(NetworkEndian::read_u32(buf) as usize + 4)
     }
 
     pub fn parse(buf: &'a [u8]) -> Result<Self> {
