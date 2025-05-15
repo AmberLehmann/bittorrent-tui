@@ -386,7 +386,7 @@ pub async fn handle_torrent(
         .iter()
         .take(30)
         .filter(|&p| {
-            p.addr != torrent.local_addr && (demo && p.addr.ip() == torrent.local_addr.ip())
+            p.addr != torrent.local_addr || (demo && p.addr.ip() == torrent.local_addr.ip())
         }) // change addr to ip + change to eq
         .map(|p| {
             let msg = handshake_msg.clone();
