@@ -685,21 +685,26 @@ async fn peer_handler(
                 // if we arent currently waiting for a reponse back from our peer and they arent
                 // choking us then claim one of the next rarest pieces and request it.
                 if !waiting && !peer.peer_choking {
-                    let mut info = pieces_info.lock().unwrap();
-                    // this is not rarest first, just random TODO: make rarest first
-                    let p = info.iter().enumerate().filter(|&(_, p)| p.status == PieceStatus::NotRequested).take(4).choose(&mut rand::rng());
-                    match p {
-                        Some((i, p)) => {
-                            info[i].status = PieceStatus::Requested;
-                            if let Ok(bytes_written) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) {
-                                peer.out_stream.write(&stream_buf[..bytes_written]);
+                    let mut bytes_written = None;
+                    {
+                        let mut info = pieces_info.lock().unwrap();
+                        // this is not rarest first, just random TODO: make rarest first
+                        let p = info.iter().enumerate().filter(|&(_, p)| p.status == PieceStatus::NotRequested).take(4).choose(&mut rand::rng());
+                        match p {
+                            Some((i, p)) => {
+                                info[i].status = PieceStatus::Requested;
+                                let Ok(b) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) else { continue };
+                                bytes_written = Some(b);
+                                waiting = true;
+                            },
+                            None => {
+                                // we have downloaded all pieces so no need to send anything
                             }
-                            waiting = true;
-                        },
-                        None => {
-                            // we have downloaded all pieces so no need to send anything
                         }
                     }
+
+                    let Some(len) = bytes_written else { continue };
+                    peer.out_stream.write(&stream_buf[..len]).await?;
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
