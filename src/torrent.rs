@@ -980,6 +980,7 @@ async fn peer_handler(
                                             let len = Message::Request(messages::Request {index: pi.0 as u32, begin: (block_size * next) as u32, length: block_size as u32}).create(&mut stream_buf).unwrap();
                                             //info!("requesting block {} from {} ", next, peer.addr);
                                             let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
+                                            pending_requests.insert((pi.0 as u32, (block_size * next) as u32), Instant::now()); // TODO - not just 0, interpolate with fixed logic
                                         }
                                     },
                                     Message::Cancel(c) => {},
