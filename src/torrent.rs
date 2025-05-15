@@ -267,8 +267,9 @@ impl Torrent {
                         if (info_stuff.piece_length as u64 * (piece_index as u64 + 1)) as u64
                             > info_stuff.length
                         {
-                            ((info_stuff.piece_length as u64 * (piece_index as u64 + 1)) as u64
-                                - info_stuff.length) as u32
+                            (info_stuff.length
+                                - (info_stuff.piece_length as u64 * piece_index as u64) as u64)
+                                as u32
                         } else {
                             info_stuff.piece_length as u32
                         };
@@ -1031,6 +1032,7 @@ async fn peer_handler(
 
                                         piece_buf[p.begin as usize..p.begin as usize + p.block.len()]
                                             .copy_from_slice(p.block);
+                                        info!("copying {} to {}", p.begin, p.block.len());
 
                                         let Some(ref mut pi) = &mut requested else { continue };
                                         pi.1.needed_requests[(p.begin as usize + block_size - 1) / block_size].status = BlockStatus::Confirmed;
@@ -1048,6 +1050,7 @@ async fn peer_handler(
                                         if next >= pi.1.needed_requests.len() {
                                             // TODO: hashing
                                             let id = hash_buffer(&piece_buf[..pi.1.length as usize]);
+                                            info!("hashing {}", std::str::from_utf8(&piece_buf[..pi.1.length as usize]).unwrap_or(""));
                                             if pi.1.hash != id {
                                                 {
                                                     let mut info = pieces_info.lock().unwrap();
