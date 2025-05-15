@@ -4,15 +4,12 @@ use crate::{
     messages::{self, Message},
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
-    tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
+    tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20, PeerId20, HANDSHAKE_LEN, PROTOCOL_V_1,
 };
-use bitvec::{
-    order::Msb0,
-    prelude::{BitSlice, BitVec},
-};
+use bitvec::{order::Msb0, prelude::BitVec};
 use byteorder::{ByteOrder, NetworkEndian};
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use log::{debug, error, info, warn};
 use rand::{
     distr::Alphanumeric, random_range, seq::index::sample_weighted, seq::IteratorRandom, Rng,
@@ -26,7 +23,6 @@ use std::{
     io::{Cursor, Read, Write},
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
-    task::{Context, Poll},
     time::{Duration, Instant},
 };
 use tokio::{
