@@ -1020,7 +1020,12 @@ async fn peer_handler(
                             Some((i, p)) => {
                                 requested = Some((i, p.clone()));
                                 info[i].status = PieceStatus::Requested;
-                                let Ok(b) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) else { continue };
+                                let Ok(b) = Message::Request(
+                                        messages::Request {
+                                            index: i as u32,
+                                            begin: 0,
+                                            length: block_size as u32
+                                        }).create(&mut stream_buf) else { continue };
                                 bytes_written = Some(b);
                                 // for tracking upload rate
                                 pending_requests.insert((i as u32, 0), Instant::now()); // TODO - not just 0, interpolate with fixed logic
