@@ -368,16 +368,19 @@ pub async fn handle_torrent(
     // spawn listening thread? that will constantly loop on things??
     // keep track of total connections somehow?? so we don't go above 55 TODO
 
+
     let (torrent_tx, peer_rx) = unbounded_channel();
     let handshake_msg = Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
-    let mut peer_handlers: Vec<(JoinHandle<_>, UnboundedSender<TcpStream>)> = response
+    let mut peer_handlers: HashMap<SocketAddr, (JoinHandle<Result<(), tokio::io::Error>>, UnboundedSender<PeerCommand>, Arc<Mutex<PeerStats>>)> = response
         .peers
         .iter()
         .take(30)
         .filter(|&p| p.addr != torrent.local_addr)
         .map(|p| {
             let msg = handshake_msg.clone();
-            let (tx, rx) = unbounded_channel();
+            let (cmd_tx, cmd_rx) 
+                : (UnboundedSender<PeerCommand>, UnboundedReceiver<PeerCommand>) 
+                = unbounded_channel(); // command channel
             let known_peers_clone = Arc::clone(&known_peers);
             let real_peer_id: Option<PeerId20> = match &p.peer_id {
                 Some(bytes) if bytes.len() == 20 => {
@@ -395,8 +398,14 @@ pub async fn handle_torrent(
                 }
                 None => None,
             };
+
+            // for upload rate calculations
+            let peer_stats_1 : Arc<Mutex<PeerStats>> = Arc::new(Mutex::new(PeerStats{is_interested: false, upload_rate: 0.0}));
+            let new_peer_stats_1 = Arc::clone(&peer_stats_1);
+
             (
-                tokio::spawn(peer_handler(
+                p.addr,
+                (tokio::spawn(peer_handler(
                     p.addr,
                     real_peer_id,
                     torrent.info_hash,
@@ -405,22 +414,41 @@ pub async fn handle_torrent(
                     torrent.pieces_data.clone(),
                     msg,
                     torrent_tx.clone(),
-                    rx,
+                    cmd_rx,
                     known_peers_clone,
                     true,
                     None,
+                    new_peer_stats_1
                 )),
-                tx,
+                cmd_tx,
+                peer_stats_1)
             )
         })
         .collect();
 
+    // tracker requests
     let tick_rate = std::time::Duration::from_millis(50);
     let mut interval = tokio::time::interval(tick_rate);
     let mut last_request = Instant::now();
+
+    // peer handler commands - optimistic unchoking
+    let tick_rate_commands_o = std::time::Duration::from_secs(30);
+    let mut interval_commands_o = tokio::time::interval(tick_rate_commands_o);
+    let mut last_request_commands_o = Instant::now();
+    let mut old_total_peers : usize = 0;
+    let mut old_optimistic_unchoke : Option<SocketAddr> = None;
+
+    // peer handler commands - regular unchoking
+    let tick_rate_commands_c = std::time::Duration::from_secs(10);
+    let mut interval_commands_c = tokio::time::interval(tick_rate_commands_c);
+    let mut last_request_commands_c = Instant::now();
+
+
     let mut buf = BytesMut::with_capacity(1024);
     loop {
         let delay = interval.tick();
+        let delay_command_o = interval_commands_o.tick();
+        let delay_command_c = interval_commands_c.tick();
         // TODO: make actually async like peer_handler?
         tokio::select! {
             tracker_resp = tracker_stream.read_buf(&mut buf) => {
@@ -445,12 +473,20 @@ pub async fn handle_torrent(
 
                 // accept incoming peer start
                 let msg = handshake_msg.clone();
-                let (tx, rx) = unbounded_channel();
+                let (cmd_tx, cmd_rx) 
+                    : (UnboundedSender<PeerCommand>, UnboundedReceiver<PeerCommand>) 
+                    = unbounded_channel(); // command channel
                 let known_peers_clone = Arc::clone(&known_peers);
 
+                // for upload rate calculations
+                let peer_stats_2 : Arc<Mutex<PeerStats>> = Arc::new(Mutex::new(PeerStats{is_interested: false, upload_rate: 0.0}));
+                let new_peer_stats_2 = Arc::clone(&peer_stats_2);
+
                 // also maybe it needs a lock? TODO
-                peer_handlers.push(
-                    (tokio::spawn(peer_handler(
+                peer_handlers.insert(
+                    peer_addr,
+                    (
+                        tokio::spawn(peer_handler(
                         peer_addr,
                         None,
                         torrent.info_hash,
@@ -459,12 +495,15 @@ pub async fn handle_torrent(
                         torrent.pieces_data.clone(),
                         msg,
                         torrent_tx.clone(),
-                        rx,
+                        cmd_rx,
                         known_peers_clone,
                         false,
-                        Some(peer_stream)
-                    )),
-                    tx)
+                        Some(peer_stream),
+                        new_peer_stats_2
+                        )),
+                        cmd_tx,
+                        peer_stats_2
+                    )
                 );
 
                 // accept incoming peer end
@@ -479,8 +518,48 @@ pub async fn handle_torrent(
                     let http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
                     tracker_stream.write_all(&http_msg).await?; // NOTE: Causes Pipe Error (BAD) - maybe change helps?
                 }
-                // send periodic update to tracker
+                // send periodic update to tracker TODO
+                // receive it somewhere TODO
             },
+                _ = delay_command_o => { // optimistic unchoking timer
+                    if last_request_commands_o.elapsed() > std::time::Duration::from_secs(30) {
+                        last_request_commands_o = Instant::now();
+                        // TODO - signals
+                        // do optimistic unchoking
+                        // HashMap<SocketAddr, (JoinHandle<_>, UnboundedSender<PeerCommand>, Arc<Mutex<PeerStats>>)>
+                        // where the handle might be dead.
+
+                        // must somehow track who the most recent optimistic unchoke is - I don't know how to do that
+                        // want to prefer recently connected peers 
+
+                        // we have access to old_total_peers and old_optimistic_unchoke which are both usize
+                        // must change from old_optimistic_unchoke, 
+                        // and prefer things from old_total_peers -> end of vector 3x more than the rest
+                        // we *must not choose* something with a dead handle - once we choose something
+                        // make sure it's not dead, and if it is choose something else (just increment the index maybe with modulo)
+
+
+                        // once we chose something new:
+                        // clear all dead handles
+                        // store new old_optimistic_unchoke and old_total_peers
+                    }
+                },
+            _ = delay_command_c => { // regular unchoking timer
+                if last_request_commands_c.elapsed() > std::time::Duration::from_secs(10) {
+                    last_request_commands_c = Instant::now();
+                    // TODO - signals
+                    // do regular unchoking
+                    // given
+                    // pub struct PeerStats {
+                    //     pub addr: SocketAddr,
+                    //     pub is_interested: bool,
+                    //     pub upload_rate: f64
+                    // }
+                    // HashMap<SocketAddr, (JoinHandle<_>, UnboundedSender<PeerCommand>, Arc<Mutex<PeerStats>>)>
+                    // where the handle might be dead - in which case we should remove it from this vector? unsure
+
+                }
+            }
         }
     }
 }
@@ -503,10 +582,11 @@ async fn peer_handler(
     pieces_data: Arc<Vec<RwLock<Vec<u8>>>>,
     mut handshake_msg: BytesMut,
     tx: UnboundedSender<PeerMsg>,
-    mut rx: UnboundedReceiver<TcpStream>,
+    mut cmd_rx: UnboundedReceiver<PeerCommand>,
     known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
     is_outgoing: bool,
     existing_stream: Option<TcpStream>,
+    shared_stats: Arc<Mutex<PeerStats>>
 ) -> Result<(), tokio::io::Error> {
     let mut peer = ConnectedPeer {
         addr,
@@ -527,6 +607,12 @@ async fn peer_handler(
     };
     let mut last_response = Instant::now();
     info!("connected to {addr}");
+
+    // for tracking upload rate
+    // (index, begin) of a block request mapped to when it was made
+    let mut pending_requests: HashMap<(u32, u32), Instant> = HashMap::new();
+    // (bytes in the upload, time passed) for a few recent uploads
+    let mut recent_uploads: Vec<(usize, f64)> = Vec::new();
 
     let block_size: usize = 1 << 14; // handle slightly bigger size? (i set it to 16 not 15)
     let mut len_buf = [0u8; 4];
@@ -653,8 +739,18 @@ async fn peer_handler(
                                     Message::KeepAlive => last_response = Instant::now(),
                                     Message::Choke => peer.peer_choking = true,
                                     Message::UnChoke => peer.peer_choking = false,
-                                    Message::Interested => peer.peer_interested = true,
-                                    Message::NotInterested => peer.peer_interested = false,
+                                    Message::Interested => {
+                                        peer.peer_interested = true;
+                                        if let Ok(mut stats) = shared_stats.lock() {
+                                            stats.is_interested = true;
+                                        }
+                                    },
+                                    Message::NotInterested => {
+                                        peer.peer_interested = false;
+                                        if let Ok(mut stats) = shared_stats.lock() {
+                                            stats.is_interested = false;
+                                        }
+                                    },
                                     Message::Have(h) => {
                                         // update global torrent piece map
                                         let _ = tx.send(PeerMsg::Have(h.piece_index));
@@ -675,10 +771,41 @@ async fn peer_handler(
                                         // choking this peer
                                     },
                                     Message::Piece(p) => {
+                                        // idk where to put this but this is for calculating upload rate
+                                        {
+                                            if let Some(time_of_request) = pending_requests.remove(&(p.index, p.begin)) {
+                                                let elapsed_time = time_of_request.elapsed().as_millis() as f64;
+                                                if elapsed_time > 0.0 { // idk i had to do this in C
+                                                    recent_uploads.push((p.block.len(), elapsed_time));
+                                                }
+
+                                                // remove head so that "recent" is actually true lol
+                                                while recent_uploads.len() > 5 {
+                                                    recent_uploads.remove(0);
+                                                }
+
+                                                // recent_uploads is the (length of the block, the elapsed time)
+                                                // need to calculate general upload rate based off this
+                                                let (total_bytes, total_time): (usize, f64) = recent_uploads.iter().fold((0,0.0), |(l_sum, e_sum), (l, e)| (l_sum + l, e_sum + e));
+                                                let upload_rate = if total_time > 0.0 { // time is weird
+                                                    total_bytes as f64 / total_time
+                                                } else {
+                                                    0.0
+                                                };
+
+                                                // Update shared stats
+                                                if let Ok(mut stats) = shared_stats.lock() {
+                                                    stats.upload_rate = upload_rate;
+                                                }
+                                            }
+                                        }
+                                        // end of upload rate tracking
+
                                         piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
                                         blocks[p.begin as usize / piece_size] = true;
                                         let mut next = 0;
                                         while next < blocks.len() { if !blocks[next] { break; } else { next += 1; }}
+                                        
                                         if next == blocks.len() {
                                             // TODO: hashing
                                         } else {
@@ -714,6 +841,8 @@ async fn peer_handler(
                                 info[i].status = PieceStatus::Requested;
                                 let Ok(b) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) else { continue };
                                 bytes_written = Some(b);
+                                // for tracking upload rate
+                                pending_requests.insert((i as u32, 0), Instant::now()); // TODO - not just 0, interpolate with fixed logic
                             },
                             None => {
                                 // we have downloaded all pieces so no need to send anything
@@ -960,8 +1089,22 @@ pub struct ConnectedPeer {
 }
 
 #[derive(Debug)]
-enum PeerCommand {
+pub enum PeerCommand {
     Choke,
     Unchoke,
-    Kill
+    Kill,
+    NewStream(TcpStream)
+}
+
+#[derive(Debug)]
+pub struct PeerStats {
+    pub is_interested: bool,
+    pub upload_rate: f64
+}
+
+#[derive(Debug)]
+pub struct HandleEntry {
+    pub handle: JoinHandle<Result<(), tokio::io::Error>>,
+    pub sender: UnboundedSender<PeerCommand>,
+    pub stats: Arc<Mutex<PeerStats>>
 }
