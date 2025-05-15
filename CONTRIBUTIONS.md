@@ -1,5 +1,8 @@
 - Prajwal
   - Adjusting Hasher to be for 20bytes
+  - Adjusting Hashing code for the torrent specs
+  - Working on UDP impelementation in Rust
+  - tests for TCP and UDP trackers
 
 - Thomas
   - UI
