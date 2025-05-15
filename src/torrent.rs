@@ -4,15 +4,12 @@ use crate::{
     messages::{self, Message},
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
-    tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
+    tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20, PeerId20, HANDSHAKE_LEN, PROTOCOL_V_1,
 };
-use bitvec::{
-    order::Msb0,
-    prelude::{BitSlice, BitVec},
-};
+use bitvec::{order::Msb0, prelude::BitVec};
 use byteorder::{ByteOrder, NetworkEndian};
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use log::{debug, error, info, warn};
 use rand::{
     distr::Alphanumeric, random_range, seq::index::sample_weighted, seq::IteratorRandom, Rng,
@@ -26,7 +23,6 @@ use std::{
     io::{Cursor, Read, Write},
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
-    task::{Context, Poll},
     time::{Duration, Instant},
 };
 use tokio::{
@@ -433,6 +429,7 @@ pub async fn handle_torrent(
             let peer_stats_1: Arc<Mutex<PeerStats>> = Arc::new(Mutex::new(PeerStats {
                 is_interested: false,
                 upload_rate: 0.0,
+                download_rate: 0.0
             }));
             let new_peer_stats_1 = Arc::clone(&peer_stats_1);
 
@@ -521,7 +518,7 @@ pub async fn handle_torrent(
 
                 // for upload rate calculations
                 let peer_stats_2 : Arc<Mutex<PeerStats>> = Arc::new(
-                    Mutex::new(PeerStats{is_interested: false, upload_rate: 0.0})
+                    Mutex::new(PeerStats{is_interested: false, upload_rate: 0.0, download_rate: 0.0})
                 );
                 let new_peer_stats_2 = Arc::clone(&peer_stats_2);
 
@@ -723,7 +720,7 @@ pub async fn handle_torrent(
                         })
                         .collect();
                     // sort by upload rate
-                    relevant_peers.sort_by(|a, b| b.1.upload_rate.partial_cmp(&a.1.upload_rate).unwrap_or(std::cmp::Ordering::Equal));
+                    relevant_peers.sort_by(|a, b| (b.1.upload_rate / b.1.download_rate).partial_cmp(&(a.1.upload_rate / a.1.download_rate)).unwrap_or(std::cmp::Ordering::Equal));
 
                     // unchoke the 4 peers who *are interested* and have the best upload rate
                     // unchoke all peers with better upload rate than those 4
@@ -808,6 +805,12 @@ async fn peer_handler(
     // (bytes in the upload, time passed) for a few recent uploads
     let mut recent_uploads: Vec<(usize, f64)> = Vec::new();
 
+    // for tracking download rate
+    // (index) of a piece request mapped to when it was made, how big the requests were
+    let mut pending_sends: HashMap<u32, (Instant, u32)> = HashMap::new();
+    // (bytes in the upload, time passed) for a few recent uploads
+    let mut recent_downs: Vec<(usize, f64)> = Vec::new();
+
     let block_size: usize = 1 << 14; // handle slightly bigger size? (i set it to 16 not 15)
     let mut len_buf = [0u8; 4];
     let mut stream_buf = vec![0u8; block_size + 50];
@@ -861,7 +864,7 @@ async fn peer_handler(
     // randomized timeout
     let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
-    let mut tui_interval = tokio::time::interval(Duration::from_millis(500));
+    let mut tui_interval = tokio::time::interval(Duration::from_millis(100));
     loop {
         let delay = interval.tick();
         let tui_update_delay = tui_interval.tick();
@@ -874,7 +877,7 @@ async fn peer_handler(
                 // either respond to request or
                 // timeout on reads is 2 seconds now
                 match timeout(
-                    tokio::time::Duration::from_millis(500),
+                    tokio::time::Duration::from_millis(100),
                     peer.out_stream.peek(&mut len_buf)
                 ).await {
                     Err(e) => {
@@ -957,6 +960,39 @@ async fn peer_handler(
                                         }
                                     },
                                     Message::Have(h) => {
+                                        // idk where to put this but this is for calculating download rate
+                                        { // GGGGGGGGGGGGGGGGGG
+                                            if let Some((time_of_request, leng)) = pending_sends.remove(&(h.piece_index)) {
+                                                let elapsed_time = time_of_request.elapsed().as_millis() as f64;
+                                                if elapsed_time > 0.0 { // idk i had to do this in C
+                                                    recent_downs.push((leng as usize, elapsed_time));
+                                                }
+
+                                                // remove head so that "recent" is actually true lol
+                                                while recent_downs.len() > 5 {
+                                                    recent_downs.remove(0);
+                                                }
+
+                                                // recent_downs is the (length of the block, the elapsed time)
+                                                // need to calculate general upload rate based off this
+                                                let (total_bytes, total_time): (usize, f64) =
+                                                    recent_downs.iter().fold((0,0.0),
+                                                        |(l_sum, e_sum), (l, e)| (l_sum + l, e_sum + e));
+                                                let download_rate = if total_time > 0.0 { // time is weird
+                                                    total_bytes as f64 / total_time
+                                                } else {
+                                                    0.0
+                                                };
+
+                                                // Update shared stats
+                                                if let Ok(mut stats) = shared_stats.lock() {
+                                                    stats.download_rate = download_rate;
+                                                }
+                                            }
+                                        }
+                                        // end of download rate tracking
+
+
                                         debug!("Seciding something something on send from peer channel");
                                         // update global torrent piece map
                                         // let _ = tx.send(PeerMsg::Have(h.piece_index)); // useless
@@ -978,6 +1014,17 @@ async fn peer_handler(
                                         debug!("interested write returned {:?}, wrote {}", bytes_written, b);
                                     },
                                     Message::Request(r) => {
+
+                                        // for download speed
+                                        if let Some((instant, length)) = pending_sends.get(&r.index) {
+                                            // same isntant diff length
+                                            pending_sends.insert(r.index, (*instant, length + r.length));
+                                        } else {
+                                            // new
+                                            pending_sends.insert(r.index, (Instant::now(), r.length));
+                                        }
+
+
                                         // check if we have the piece then send it if we do and if we arent
                                         // choking this peer
                                         if peer.am_choking {
@@ -1424,6 +1471,7 @@ pub enum PeerCommand {
 pub struct PeerStats {
     pub is_interested: bool,
     pub upload_rate: f64,
+    pub download_rate: f64
 }
 
 #[derive(Debug)]
