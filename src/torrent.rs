@@ -603,7 +603,7 @@ async fn peer_handler(
 
                 // either respond to request or
                 // timeout on reads is 2 seconds now
-                match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.peek(&mut len_buf)).await {
+                match timeout(tokio::time::Duration::from_secs(1), peer.out_stream.peek(&mut len_buf)).await {
                     Err(e) => {
                         debug!("would block poll on peek v1: {e}, {addr}");
                         continue;
@@ -764,8 +764,8 @@ async fn peer_handler(
                     }
 
                     let Some(len) = bytes_written else { continue };
-                    debug!("requesting block 0 from {} ", peer.addr);
-                    let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
+                    info!("requesting block 0 from {} ", peer.addr);
+                    peer.out_stream.write_all(&mut stream_buf[..len]).await?;
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
