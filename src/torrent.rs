@@ -944,6 +944,17 @@ async fn peer_handler(
                                     Message::Request(r) => {
                                         // check if we have the piece then send it if we do and if we arent
                                         // choking this peer
+                                        if peer.am_choking {
+                                            // do nothing
+                                            debug!("peer {} requested {} but we were choking them", peer.addr, r.index);
+                                        } else {
+                                            debug!("peer {} requested {}, we aren't choking them, trying to upload", peer.addr, r.index);
+                                            // AAAAAAAAAAAAAAAA
+                                            {
+                                                let mut info = pieces_info.lock().unwrap();
+                                                // do something with this
+                                            }
+                                        }
                                     },
                                     Message::Piece(p) => {
                                         // idk where to put this but this is for calculating upload rate
