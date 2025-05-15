@@ -52,6 +52,13 @@ impl Info {
         }
     }
 
+    pub fn length(&self) -> usize {
+        match self {
+            Info::Single(f) => f.length as usize,
+            Info::Multi(f) => panic!(),
+        }
+    }
+
     pub fn pieces(&self) -> &[u8] {
         match self {
             Info::Single(f) => &f.pieces,

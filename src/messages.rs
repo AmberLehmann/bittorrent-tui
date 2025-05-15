@@ -229,7 +229,7 @@ impl<'a> Message<'a> {
                     Message::Piece(Piece {
                         index,
                         begin,
-                        block: &buf[13..13 + len - 8],
+                        block: &buf[13..13 + len],
                     })
                 }
                 8 => {

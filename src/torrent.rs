@@ -118,14 +118,14 @@ pub enum PieceStatus {
     Confirmed,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BlockStatus {
     NotRequested,
     Requested,
     Confirmed,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct BlockInfo {
     status: BlockStatus,
     offset: u32,
@@ -138,6 +138,7 @@ pub struct PieceInfo {
     needed_requests: Vec<BlockInfo>,
     num_havers: u32,
     hash: HashedId20,
+    length: u32,
 }
 
 fn generate_peer_id() -> PeerId20 {
@@ -246,17 +247,31 @@ impl Torrent {
         match &new_meta.info {
             Info::Single(info_stuff) => {
                 // get number of pieces to download
-                let num_pieces = (info_stuff.length / info_stuff.piece_length) as usize;
+                let num_pieces = ((info_stuff.length + info_stuff.piece_length - 1)
+                    / info_stuff.piece_length) as usize;
+                info!(
+                    "need {} {} byte pieces",
+                    num_pieces, info_stuff.piece_length
+                );
 
                 let mut pieces_to_download_info = Vec::new();
                 let mut pieces_to_download_data = Vec::new();
                 for piece_index in 0..num_pieces {
                     // how long is this piece
-                    let mut this_piece_len = info_stuff.piece_length;
-                    if piece_index == num_pieces - 1 {
-                        this_piece_len = info_stuff.length % info_stuff.piece_length;
-                    }
-                    let this_piece_len = this_piece_len as u32;
+                    //let this_piece_len = if info_stuff.length % info_stuff.piece_length == 0 {
+                    //    info_stuff.piece_length
+                    //} else {
+                    //    info_stuff.length % info_stuff.piece_length
+                    //} as u32;
+                    let this_piece_len =
+                        if (info_stuff.piece_length as u64 * (piece_index as u64 + 1)) as u64
+                            > info_stuff.length
+                        {
+                            ((info_stuff.piece_length as u64 * (piece_index as u64 + 1)) as u64
+                                - info_stuff.length) as u32
+                        } else {
+                            info_stuff.piece_length as u32
+                        };
                     // prep spot to put that data
                     pieces_to_download_data
                         .push(RwLock::new(Vec::with_capacity(this_piece_len as usize)));
@@ -282,13 +297,21 @@ impl Torrent {
                         curr_offset += block_len;
                     }
 
+                    info!("need blocks {:?}", this_needed_requests);
+                    info!(
+                        "grabbing hash {} .. {}",
+                        piece_index * 20,
+                        (piece_index + 1) * 20
+                    );
+
                     pieces_to_download_info.push(PieceInfo {
                         status: PieceStatus::NotRequested,
                         needed_requests: this_needed_requests,
                         num_havers: 0,
-                        hash: new_meta.info.pieces()[piece_index..piece_index + 20]
+                        hash: new_meta.info.pieces()[piece_index * 20..(piece_index + 1) * 20]
                             .try_into()
                             .unwrap(),
+                        length: this_piece_len,
                     });
                 }
 
@@ -794,7 +817,6 @@ async fn peer_handler(
     let mut stream_buf = vec![0u8; block_size + 50];
     let mut piece_buf = vec![0u8; piece_size];
     let mut requested: Option<(usize, PieceInfo)> = None;
-    let mut blocks = vec![false; piece_size / block_size];
 
     if is_outgoing {
         if let Err(e) = do_outgoing_handshake(
@@ -1009,31 +1031,32 @@ async fn peer_handler(
 
                                         piece_buf[p.begin as usize..p.begin as usize + p.block.len()]
                                             .copy_from_slice(p.block);
-                                        blocks[p.begin as usize / block_size] = true;
+
+                                        let Some(ref mut pi) = &mut requested else { continue };
+                                        pi.1.needed_requests[(p.begin as usize + block_size - 1) / block_size].status = BlockStatus::Confirmed;
 
                                         //info!("{:?}", blocks);
                                         let mut next = 0;
-                                        while next < blocks.len() {
-                                            if !blocks[next] {
+                                        while next < pi.1.needed_requests.len() {
+                                            if pi.1.needed_requests[next].status != BlockStatus::Confirmed {
                                                 break;
                                             } else {
                                                 next += 1;
                                             }
                                         }
 
-                                        if next >= blocks.len() {
+                                        if next >= pi.1.needed_requests.len() {
                                             // TODO: hashing
-                                            let id = hash_buffer(&piece_buf);
-                                            let Some(ref mut pi) = &mut requested else { continue };
-                                            //if pi.1.hash != id {
-                                            //    {
-                                            //        let mut info = pieces_info.lock().unwrap();
-                                            //        info[pi.0].status = PieceStatus::NotRequested;
-                                            //    }
-                                            //    requested = None;
-                                            //    warn!("Hash did not match");
-                                            //    continue;
-                                            //}
+                                            let id = hash_buffer(&piece_buf[..pi.1.length as usize]);
+                                            if pi.1.hash != id {
+                                                {
+                                                    let mut info = pieces_info.lock().unwrap();
+                                                    info[pi.0].status = PieceStatus::NotRequested;
+                                                }
+                                                requested = None;
+                                                warn!("Hash did not match");
+                                                continue;
+                                            }
                                             let mut wr = pieces_data[pi.0].write().unwrap();
                                             *wr = std::mem::take(&mut piece_buf);
                                             piece_buf = vec![0u8; piece_size];
@@ -1045,15 +1068,13 @@ async fn peer_handler(
                                             requested = None;
                                         } else {
                                             // reqest next lsp
-                                            let Some(ref pi) = requested else { continue };
                                             let len = Message::Request(
                                                 messages::Request {
                                                     index: pi.0 as u32,
-                                                    begin: (block_size * next) as u32,
-                                                    length: block_size as u32
+                                                    begin: pi.1.needed_requests[next].offset,
+                                                    length: pi.1.needed_requests[next].length,
                                                 }
                                             ).create(&mut stream_buf).unwrap();
-                                            //info!("requesting block {} from {} ", next, peer.addr);
                                             let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
                                             pending_requests.insert(
                                                 (pi.0 as u32, (block_size * next) as u32),
@@ -1091,16 +1112,17 @@ async fn peer_handler(
                         match p {
                             Some((i, p)) => {
                                 requested = Some((i, p.clone()));
-                                info[i].status = PieceStatus::Requested;
                                 let Ok(b) = Message::Request(
                                         messages::Request {
                                             index: i as u32,
                                             begin: 0,
-                                            length: block_size as u32
+                                            length: p.needed_requests[0].length
                                         }).create(&mut stream_buf) else { continue };
                                 bytes_written = Some(b);
                                 // for tracking upload rate
                                 pending_requests.insert((i as u32, 0), Instant::now()); // TODO - not just 0, interpolate with fixed logic
+                                info[i].status = PieceStatus::Requested;
+                                info!("requesting piece {} from {} ", i, peer.addr);
                             },
                             None => {
                                 // we have downloaded all pieces so no need to send anything
@@ -1109,7 +1131,6 @@ async fn peer_handler(
                     }
 
                     let Some(len) = bytes_written else { continue };
-                    info!("requesting block 0 from {} ", peer.addr);
                     peer.out_stream.write_all(&mut stream_buf[..len]).await?;
                 }
                 // debug!("Delay");
