@@ -38,6 +38,9 @@ If anything is not working as expected, check the Logs tab for Errors.
 ## Supported Features
 - Performant TUI interface
 - Logging with 5 log levels (trace, debug, info, warning, error)
+- Ability to connect with HTTP trackers 
+- Ability to download from peers assigned by the tracker 
+
 
 ## Unsupported Features (May come soon)
 - Optional arguments passed through command line
