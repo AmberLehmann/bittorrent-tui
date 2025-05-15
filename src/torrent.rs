@@ -13,7 +13,7 @@ use bitvec::{
 use byteorder::{ByteOrder, NetworkEndian};
 use bytes::{Buf, BytesMut};
 use log::{debug, error, info};
-use rand::{distr::Alphanumeric, random_range, seq::IteratorRandom, Rng};
+use rand::{distr::Alphanumeric, random_range, seq::IteratorRandom, Rng, seq::index::sample_weighted};
 use regex::Regex;
 use sha1::{Digest, Sha1};
 use std::{
@@ -371,7 +371,7 @@ pub async fn handle_torrent(
 
     let (torrent_tx, peer_rx) = unbounded_channel();
     let handshake_msg = Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
-    let mut peer_handlers: HashMap<SocketAddr, (JoinHandle<Result<(), tokio::io::Error>>, UnboundedSender<PeerCommand>, Arc<Mutex<PeerStats>>)> = response
+    let mut peer_handlers: HashMap<SocketAddr, HandleEntry> = response
         .peers
         .iter()
         .take(30)
@@ -405,7 +405,8 @@ pub async fn handle_torrent(
 
             (
                 p.addr,
-                (tokio::spawn(peer_handler(
+                HandleEntry {
+                    handle: tokio::spawn(peer_handler(
                     p.addr,
                     real_peer_id,
                     torrent.info_hash,
@@ -419,9 +420,11 @@ pub async fn handle_torrent(
                     true,
                     None,
                     new_peer_stats_1
-                )),
-                cmd_tx,
-                peer_stats_1)
+                    )),
+                    sender: cmd_tx,
+                    stats: peer_stats_1,
+                    is_new: true
+                }
             )
         })
         .collect();
@@ -485,8 +488,8 @@ pub async fn handle_torrent(
                 // also maybe it needs a lock? TODO
                 peer_handlers.insert(
                     peer_addr,
-                    (
-                        tokio::spawn(peer_handler(
+                    HandleEntry {
+                        handle: tokio::spawn(peer_handler(
                         peer_addr,
                         None,
                         torrent.info_hash,
@@ -501,16 +504,19 @@ pub async fn handle_torrent(
                         Some(peer_stream),
                         new_peer_stats_2
                         )),
-                        cmd_tx,
-                        peer_stats_2
-                    )
+                        sender: cmd_tx,
+                        stats: peer_stats_2,
+                        is_new: true
+                    }
                 );
 
                 // accept incoming peer end
             },
             _ = delay => {
+                // debug!("delay selected");
                 // request.gen_periodic_req(uploaded, downloaded, left);
                 if last_request.elapsed() > std::time::Duration::from_secs(response.interval) {
+                    debug!("delay: generate periodic request");
                     last_request = Instant::now();
                     if request.event.is_some() {
                        request.event = None;
@@ -521,33 +527,97 @@ pub async fn handle_torrent(
                 // send periodic update to tracker TODO
                 // receive it somewhere TODO
             },
-                _ = delay_command_o => { // optimistic unchoking timer
-                    if last_request_commands_o.elapsed() > std::time::Duration::from_secs(30) {
-                        last_request_commands_o = Instant::now();
-                        // TODO - signals
-                        // do optimistic unchoking
-                        // HashMap<SocketAddr, (JoinHandle<_>, UnboundedSender<PeerCommand>, Arc<Mutex<PeerStats>>)>
-                        // where the handle might be dead.
+            _ = delay_command_o => { // optimistic unchoking timer
+                // debug!("delay_command_o selected");
+                if last_request_commands_o.elapsed() > std::time::Duration::from_secs(30) {
+                    debug!("delay_command_o: doing optimistic unchoking");
+                    last_request_commands_o = Instant::now();
+                    // signals
+                    // do optimistic unchoking
+                    // HashMap<SocketAddr, HandleEntry>
+                    // where the handle might be dead.
+                    // pub struct HandleEntry {
+                    //     pub handle: JoinHandle<Result<(), tokio::io::Error>>,
+                    //     pub sender: UnboundedSender<PeerCommand>,
+                    //     pub stats: Arc<Mutex<PeerStats>>,
+                    //     pub is_new: bool
+                    // }
 
-                        // must somehow track who the most recent optimistic unchoke is - I don't know how to do that
-                        // want to prefer recently connected peers 
+                    // clear all dead handles from the hash map
+                    // hehe https://users.rust-lang.org/t/filter-vs-retain-which-is-faster-and-why/31912
+                    peer_handlers.retain(|_, entry| !entry.handle.is_finished());
 
-                        // we have access to old_total_peers and old_optimistic_unchoke which are both usize
+                    if peer_handlers.is_empty() {
+                        debug!("delay_command_o: wtf");
+                        old_optimistic_unchoke = None;
+                    } else {
+                        // we have access to old_optimistic_unchoke (Option<SocketAddr>) which are both usize
                         // must change from old_optimistic_unchoke, 
                         // and prefer things from old_total_peers -> end of vector 3x more than the rest
-                        // we *must not choose* something with a dead handle - once we choose something
-                        // make sure it's not dead, and if it is choose something else (just increment the index maybe with modulo)
+                        // base this off the is_new value
 
+                        // put into vector (except for the old choke), add weights to vector based on is_new,
+                        // choose from it somehow based on this weights rust boook says stufffdwed see belowoewwww
 
-                        // once we chose something new:
-                        // clear all dead handles
-                        // store new old_optimistic_unchoke and old_total_peers
+                        // push to vec with so we can sample stuff
+                        let mut candidates = Vec::new();
+                        for (addr, entry) in peer_handlers.iter() {
+                            if Some(*addr) == old_optimistic_unchoke {
+                                continue;
+                            }
+                            candidates.push((addr, entry));
+                        }
+
+                        // function for the sample_weighted thing
+                        let weight_fn = |i: usize| {
+                            let (_, entry) = candidates[i];
+                            if entry.is_new {3} else {1}
+                        };
+
+                        // what if there's nothing left, we had the 1 connection? that would suck :(
+                        if candidates.is_empty() {
+                            debug!("delay_command_o: wtf2");
+                            // do nothing just keep same old unchoke
+                        } else {
+                            debug!("delay_command_o: choosing optimistic unchoke");
+                            // choose something
+                            // rust book says https://docs.rs/rand/latest/rand/seq/index/fn.sample_weighted.html
+                            let the_chosen_index = (sample_weighted(&mut rand::rng(), candidates.len(), weight_fn, 1).unwrap()).into_iter().next().unwrap();
+                            let (selected_peer, _) = candidates[the_chosen_index];
+
+                            debug!("delay_command_o: chose {}", selected_peer);
+
+                            // send signal to choke old_optimistic_unchoke (Option<SocketAddr>) if there was one
+                            if let Some(prev_peer) = old_optimistic_unchoke {
+                                if let Some(entry) = peer_handlers.get(&prev_peer) { // this should always be true but uh idk how else
+                                    let _ = entry.sender.send(PeerCommand::Choke); // FINALLY
+                                }
+                            }
+                            
+                            // send signal to unchoke selected_peer
+                            if let Some(entry) = peer_handlers.get(selected_peer) { // this should always be true but uh idk how else
+                                let _ = entry.sender.send(PeerCommand::UnChoke);
+                            }
+
+                            // set new old_optimistic_unchoke = selected_peer
+                            old_optimistic_unchoke = Some(*selected_peer);
+
+                            // set all handle entries to is_new = false
+                            for h in peer_handlers.values_mut() {
+                                h.is_new = false;
+                            }
+
+                            debug!("delay_command_o: done");
+                        }
                     }
-                },
+                }
+            },
             _ = delay_command_c => { // regular unchoking timer
+                // debug!("delay_command_c selected");
                 if last_request_commands_c.elapsed() > std::time::Duration::from_secs(10) {
+                    debug!("delay_command_c: doing periodic unchoke");
                     last_request_commands_c = Instant::now();
-                    // TODO - signals
+                    // signals
                     // do regular unchoking
                     // given
                     // pub struct PeerStats {
@@ -555,8 +625,54 @@ pub async fn handle_torrent(
                     //     pub is_interested: bool,
                     //     pub upload_rate: f64
                     // }
-                    // HashMap<SocketAddr, (JoinHandle<_>, UnboundedSender<PeerCommand>, Arc<Mutex<PeerStats>>)>
+                    // HashMap<SocketAddr, HandleEntry>
                     // where the handle might be dead - in which case we should remove it from this vector? unsure
+
+                    // kill old guys
+                    peer_handlers.retain(|_, entry| !entry.handle.is_finished());
+
+                    // alright wtf needs to happen
+                    // uhhhh
+
+                    // put into vec, sort vec by PeerStats -> upload rate (all - even if not interested)
+                    // need to grab all their locks i guess? so that we can update it later
+                    let mut relevant_peers : Vec<(SocketAddr, _)> = peer_handlers.iter()
+                        .filter_map(|(addr, entry)| {
+                            if Some(*addr) == old_optimistic_unchoke { // don't consider the optimistic unchoke
+                                None
+                            } else {
+                                let stats = entry.stats.lock().ok()?; // shouldn't ever fail
+                                Some((*addr, stats))
+                            }
+                        })
+                        .collect();
+                    // sort by upload rate
+                    relevant_peers.sort_by(|a, b| b.1.upload_rate.partial_cmp(&a.1.upload_rate).unwrap_or(std::cmp::Ordering::Equal));
+
+                    // unchoke the 4 peers who *are interested* and have the best upload rate
+                    // unchoke all peers with better upload rate than those 4
+                    // choke everyone else
+                    // aka go through the vec in order, unchoke everyone
+                    // until you have unchoked 4 interested peers
+                    // then choke everyone else
+                    let mut num_unchoked_interested = 0;
+
+                    debug!("delay_command_c: choosing...");
+
+                    for (addr, stats) in &relevant_peers {
+                        if let Some(entry) = peer_handlers.get(addr) {
+                            if num_unchoked_interested < 4 { // not yet first 4
+                                let _ = entry.sender.send(PeerCommand::UnChoke);
+                                if stats.is_interested {
+                                    num_unchoked_interested += 1;
+                                }
+                            } else { // rest of them, choke them
+                                let _ = entry.sender.send(PeerCommand::Choke);
+                            }
+                        }
+                    }
+
+                    debug!("delay_command_c: sent out chokes/unchokes");
 
                 }
             }
@@ -852,7 +968,7 @@ async fn peer_handler(
 
                     let Some(len) = bytes_written else { continue };
                     info!("requesting piece from {} ", peer.addr);
-                    let bytes_written = (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await;
+                    (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
                     peer.out_stream.flush().await?;
                 }
                 // debug!("Delay");
@@ -861,6 +977,44 @@ async fn peer_handler(
                 // TODO
                 continue;
             },
+            Some(cmd) = cmd_rx.recv() => { // for the choke unchoke shit
+                match cmd {
+                    PeerCommand::Choke => {
+                        if peer.am_choking == true {
+                            debug!("Received choke signal for {}, but was already choking", addr);
+                            // do nothing
+                        } else {
+                            peer.am_choking = true;
+                            if let Ok(len) = Message::Choke.create(&mut stream_buf) {
+                                debug!("Sending choke to {}", addr);
+                                (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                                peer.out_stream.flush().await?;
+                            }
+                        }
+                    },
+                    PeerCommand::UnChoke => {
+                        if peer.am_choking == false {
+                            debug!("Received unchoke signal for {}, but was already unchoked", addr);
+                            // do nothing
+                        } else {
+                            peer.am_choking = false;
+                            if let Ok(len) = Message::UnChoke.create(&mut stream_buf) {
+                                debug!("Sending unchoke to {}", addr);
+                                (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                                peer.out_stream.flush().await?;
+                            }
+                        }
+                        
+                    },
+                    PeerCommand::Kill => {
+                        debug!("Received kill signal for {}", addr);
+                        return Ok(());
+                    },
+                    _ => {
+                        debug!("Received weirdo signal for {}", addr);
+                    }
+                }
+            }
         }
     }
 }
@@ -1091,7 +1245,7 @@ pub struct ConnectedPeer {
 #[derive(Debug)]
 pub enum PeerCommand {
     Choke,
-    Unchoke,
+    UnChoke,
     Kill,
     NewStream(TcpStream)
 }
@@ -1106,5 +1260,6 @@ pub struct PeerStats {
 pub struct HandleEntry {
     pub handle: JoinHandle<Result<(), tokio::io::Error>>,
     pub sender: UnboundedSender<PeerCommand>,
-    pub stats: Arc<Mutex<PeerStats>>
+    pub stats: Arc<Mutex<PeerStats>>,
+    pub is_new: bool
 }
