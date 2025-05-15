@@ -906,7 +906,7 @@ async fn peer_handler(
 
                                         let Ok(b) = Message::Interested.create(&mut stream_buf) else { continue };
                                         //info!("saying I'm interested in {} ", peer.addr);
-                                        let bytes_written = (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..b][..])).await;
+                                        let bytes_written = peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..b])).await;
                                         peer.out_stream.flush().await?;
                                         debug!("interested write returned {:?}, wrote {}", bytes_written, b);
                                     },
