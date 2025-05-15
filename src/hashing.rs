@@ -90,7 +90,7 @@ async fn do_hashing(
     }
 }
 
-fn hash_buffer(in_buf: &[u8]) -> [u8; 20] {
+pub fn hash_buffer(in_buf: &[u8]) -> HashedId20 {
     let mut hasher = Sha1::new();
     hasher.update(in_buf);
     let hash = hasher.finalize();

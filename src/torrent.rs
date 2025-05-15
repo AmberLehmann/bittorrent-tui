@@ -1,5 +1,6 @@
 use crate::{
     handshake::Handshake,
+    hashing::hash_buffer,
     messages::{self, Message},
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
@@ -359,6 +360,7 @@ pub async fn handle_torrent(
 
     // to prevent duplicate connections if we can
     let known_peers = Arc::new(Mutex::new(HashMap::<PeerId20, SocketAddr>::new()));
+    let mut pieces_downloaded = 0;
 
     log::debug!("Binding listening socket at {}", torrent.local_addr);
     let listener = TcpListener::bind(torrent.local_addr).await?;
@@ -368,7 +370,7 @@ pub async fn handle_torrent(
     // spawn listening thread? that will constantly loop on things??
     // keep track of total connections somehow?? so we don't go above 55 TODO
 
-    let (torrent_tx, peer_rx) = unbounded_channel();
+    let (torrent_tx, mut peer_rx) = unbounded_channel();
     let handshake_msg = Handshake::new(torrent.info_hash, torrent.my_peer_id).serialize_handshake();
     let mut peer_handlers: Vec<(JoinHandle<_>, UnboundedSender<TcpStream>)> = response
         .peers
@@ -469,6 +471,18 @@ pub async fn handle_torrent(
 
                 // accept incoming peer end
             },
+            msg = peer_rx.recv() => {
+                let msg = msg.ok_or(TrackerError::ChannelClosed)?;
+                match msg {
+                    PeerMsg::Have(i) => {},
+                    PeerMsg::Closed => {},
+                    PeerMsg::Field(f) => {},
+                    PeerMsg::Confirmed(i) => {
+                        pieces_downloaded += 1;
+                        info!("downloaded piece {}, {}/{}", i, pieces_downloaded, torrent.pieces_data.len());
+                    },
+                }
+            }
             _ = delay => {
                 // request.gen_periodic_req(uploaded, downloaded, left);
                 if last_request.elapsed() > std::time::Duration::from_secs(response.interval) {
@@ -489,6 +503,7 @@ enum PeerMsg {
     Closed,
     Have(u32),
     Field(BitVec<u8, Msb0>),
+    Confirmed(usize),
 }
 
 // needs some way for the main thread to signal that this task should be cancled. needs signal to
@@ -532,7 +547,7 @@ async fn peer_handler(
     let mut len_buf = [0u8; 4];
     let mut stream_buf = vec![0u8; block_size + 50];
     let mut piece_buf = vec![0u8; piece_size];
-    let mut requested = None;
+    let mut requested: Option<(usize, PieceInfo)> = None;
     let mut blocks = vec![false; piece_size / block_size];
 
     if is_outgoing {
@@ -658,6 +673,7 @@ async fn peer_handler(
                                     Message::Have(h) => {
                                         // update global torrent piece map
                                         let _ = tx.send(PeerMsg::Have(h.piece_index));
+                                        peer.bitfield.set(h.piece_index as usize, true);
                                     },
                                     Message::Bitfield(b) => {
                                         // update global torrent piece map
@@ -665,7 +681,7 @@ async fn peer_handler(
                                         let _ = tx.send(PeerMsg::Field(peer.bitfield.clone()));
 
                                         let Ok(b) = Message::Interested.create(&mut stream_buf) else { continue };
-                                        info!("saying I'm interested in {} ", peer.addr);
+                                        //info!("saying I'm interested in {} ", peer.addr);
                                         let bytes_written = (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..b][..])).await;
                                         peer.out_stream.flush().await?;
                                         debug!("interested write returned {:?}, wrote {}", bytes_written, b);
@@ -676,9 +692,9 @@ async fn peer_handler(
                                     },
                                     Message::Piece(p) => {
                                         piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
-                                        blocks[p.begin as usize / piece_size] = true;
+                                        blocks[p.begin as usize / block_size] = true;
 
-                                        info!("{:?}", blocks);
+                                        //info!("{:?}", blocks);
                                         let mut next = 0;
                                         while next < blocks.len() {
                                             if !blocks[next] {
@@ -688,14 +704,26 @@ async fn peer_handler(
                                             }
                                         }
 
-                                        if next == blocks.len() {
+                                        if next >= blocks.len() {
                                             // TODO: hashing
-                                            info!("hashing piece");
+                                            let id = hash_buffer(&piece_buf);
+                                            // TODO: compare hash to expected hash
+
+                                            let Some(ref pi) = requested else { continue };
+                                            let mut wr = pieces_data[pi.0].write().unwrap();
+                                            *wr = std::mem::take(&mut piece_buf);
+                                            piece_buf = vec![0u8; piece_size];
+                                            {
+                                                let mut info = pieces_info.lock().unwrap();
+                                                info[pi.0].status = PieceStatus::Confirmed;
+                                            }
+                                            let _ = tx.send(PeerMsg::Confirmed(pi.0));
+                                            requested = None;
                                         } else {
                                             // reqest next lsp
-                                            let Some(i) = requested else { continue };
-                                            let len = Message::Request(messages::Request {index: i as u32, begin: (block_size * next) as u32, length: block_size as u32}).create(&mut stream_buf).unwrap();
-                                            info!("requesting block {} from {} ", next, peer.addr);
+                                            let Some(ref pi) = requested else { continue };
+                                            let len = Message::Request(messages::Request {index: pi.0 as u32, begin: (block_size * next) as u32, length: block_size as u32}).create(&mut stream_buf).unwrap();
+                                            //info!("requesting block {} from {} ", next, peer.addr);
                                             let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
                                         }
                                     },
@@ -724,7 +752,7 @@ async fn peer_handler(
                         let p = info.iter().enumerate().filter(|&(_, p)| p.status == PieceStatus::NotRequested).take(4).choose(&mut rand::rng());
                         match p {
                             Some((i, p)) => {
-                                requested = Some(i);
+                                requested = Some((i, p.clone()));
                                 info[i].status = PieceStatus::Requested;
                                 let Ok(b) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) else { continue };
                                 bytes_written = Some(b);
@@ -736,7 +764,7 @@ async fn peer_handler(
                     }
 
                     let Some(len) = bytes_written else { continue };
-                    info!("requesting block 0 from {} ", peer.addr);
+                    debug!("requesting block 0 from {} ", peer.addr);
                     let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
                 }
                 // debug!("Delay");

@@ -18,6 +18,7 @@ pub enum TrackerError {
     JoinTasks(tokio::task::JoinError),
     MultiFile,
     MalformedHttpResponse,
+    ChannelClosed,
 }
 
 impl std::error::Error for TrackerError {}
@@ -48,6 +49,7 @@ impl Display for TrackerError {
             Self::JoinTasks(e) => e.fmt(f),
             Self::MalformedHttpResponse => write!(f, "Invalid http/message split"),
             Self::MultiFile => write!(f, "Multifile mode is currently not supported"),
+            Self::ChannelClosed => write!(f, "Torrent Channel closed"),
         }
     }
 }
