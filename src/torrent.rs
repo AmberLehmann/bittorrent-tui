@@ -1056,7 +1056,7 @@ async fn peer_handler(
                             peer.am_choking = true;
                             if let Ok(len) = Message::Choke.create(&mut stream_buf) {
                                 debug!("Sending choke to {}", addr);
-                                (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                                peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..len])).await?;
                                 peer.out_stream.flush().await?;
                             }
                         }
@@ -1069,7 +1069,7 @@ async fn peer_handler(
                             peer.am_choking = false;
                             if let Ok(len) = Message::UnChoke.create(&mut stream_buf) {
                                 debug!("Sending unchoke to {}", addr);
-                                (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                                peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
                                 peer.out_stream.flush().await?;
                             }
                         }
