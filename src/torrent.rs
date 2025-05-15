@@ -977,7 +977,13 @@ async fn peer_handler(
                                         } else {
                                             // reqest next lsp
                                             let Some(ref pi) = requested else { continue };
-                                            let len = Message::Request(messages::Request {index: pi.0 as u32, begin: (block_size * next) as u32, length: block_size as u32}).create(&mut stream_buf).unwrap();
+                                            let len = Message::Request(
+                                                messages::Request {
+                                                    index: pi.0 as u32,
+                                                    begin: (block_size * next) as u32,
+                                                    length: block_size as u32
+                                                }
+                                            ).create(&mut stream_buf).unwrap();
                                             //info!("requesting block {} from {} ", next, peer.addr);
                                             let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
                                             pending_requests.insert((pi.0 as u32, (block_size * next) as u32), Instant::now()); // TODO - not just 0, interpolate with fixed logic
@@ -1005,7 +1011,11 @@ async fn peer_handler(
                     {
                         let mut info = pieces_info.lock().unwrap();
                         // this is not rarest first, just random TODO: make rarest first
-                        let p = info.iter().enumerate().filter(|&(_, p)| p.status == PieceStatus::NotRequested).take(4).choose(&mut rand::rng());
+                        let p = info.iter()
+                                .enumerate()
+                                .filter(|&(_, p)| p.status == PieceStatus::NotRequested)
+                                .take(4)
+                                .choose(&mut rand::rng());
                         match p {
                             Some((i, p)) => {
                                 requested = Some((i, p.clone()));
