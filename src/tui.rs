@@ -112,7 +112,7 @@ impl App {
 
         let mut logfile = BufWriter::new(File::create("log.txt")?);
         for (l, t) in &self.log_tab.text {
-            logfile.write(format!("{}{}", LEVELS[*l as usize - 1], t).as_bytes())?;
+            logfile.write_all(format!("{}{}", LEVELS[*l as usize - 1], t).as_bytes())?;
         }
         logfile.flush()?;
 

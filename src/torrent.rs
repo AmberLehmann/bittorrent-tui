@@ -472,6 +472,9 @@ pub async fn handle_torrent(
                 // request.gen_periodic_req(uploaded, downloaded, left);
                 if last_request.elapsed() > std::time::Duration::from_secs(response.interval) {
                     last_request = Instant::now();
+                    if request.event.is_some() {
+                       request.event = None;
+                    }
                     let http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
                     tracker_stream.write_all(&http_msg).await?; // NOTE: Causes Pipe Error (BAD) - maybe change helps?
                 }
@@ -791,9 +794,6 @@ async fn do_incoming_handshake(
         error!("Could not read peer_id: {e}");
         return Err(DoHandshakeError::BadRead);
     }
-    let their_id: PeerId20 = their_id
-        .try_into()
-        .map_err(|_| DoHandshakeError::BadPeerId)?;
 
     debug!("Got peer_id from {}", peer_addr);
 
@@ -891,6 +891,7 @@ async fn do_outgoing_handshake(
                 "Got peer_id {:?}, but expected \nid {:?}",
                 their_id, expected_peer_id
             );
+            return Err(DoHandshakeError::BadPeerId);
         } // caller makes sure we aren't connecting to self
     }
 
