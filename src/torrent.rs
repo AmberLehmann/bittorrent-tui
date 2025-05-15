@@ -525,14 +525,27 @@ pub async fn handle_torrent(
                 // accept incoming peer end
             },
             msg = peer_rx.recv() => {
+                debug!("Got something on recv from peer channel");
                 let msg = msg.ok_or(TrackerError::ChannelClosed)?;
+                debug!("That thing was ok");
                 match msg {
-                    PeerMsg::Have(i) => {},
-                    PeerMsg::Closed => {},
-                    PeerMsg::Field(f) => {},
+                    PeerMsg::Have(i) => {
+                        debug!("That thing was a have {i}");
+                    },
+                    PeerMsg::Closed => {
+                        debug!("That thing was a closed, clearing from hashmap");
+                        peer_handlers.retain(|_, entry| !entry.handle.is_finished());
+                    },
+                    PeerMsg::Field(f) => {debug!("That thing was a field");},
                     PeerMsg::Confirmed(i) => {
+                        debug!("That thing was a confirmed");
                         pieces_downloaded += 1;
-                        info!("downloaded piece {}, {}/{}", i, pieces_downloaded, torrent.pieces_data.len());
+                        info!("downloaded piece {}, {}/{}, sending updates to peer threads", i, pieces_downloaded, torrent.pieces_data.len());
+                        // send HaveUpdate to all peers
+                        for (addr, entry) in &peer_handlers {
+                            let _ = entry.sender.send(PeerCommand::HaveUpdate(i as u32));
+                            // debug!("Sent HaveUpdate({}) to peer {}", i, addr);
+                        }
                     },
                 }
             }
@@ -704,6 +717,7 @@ pub async fn handle_torrent(
     }
 }
 
+#[derive(Debug)]
 enum PeerMsg {
     Closed,
     Have(u32),
@@ -774,7 +788,9 @@ async fn peer_handler(
         .await
         {
             error!("Handshake error, returning from peer_handler");
-            // close socket!!!! TODO
+            // stream should be closed
+            debug!("Stream closed, {addr}");
+            let _ = tx.send(PeerMsg::Closed);
             return Err(tokio::io::Error::new(
                 tokio::io::ErrorKind::Other,
                 format!("Handshake failed"),
@@ -792,7 +808,9 @@ async fn peer_handler(
         .await
         {
             error!("Handshake error, returning from peer_handler");
-            // close socket!!!! TODO
+            // stream should be closed
+            debug!("Stream closed, {addr}");
+            let _ = tx.send(PeerMsg::Closed);
             return Err(tokio::io::Error::new(
                 tokio::io::ErrorKind::Other,
                 format!("Handshake failed"),
@@ -895,8 +913,9 @@ async fn peer_handler(
                                         }
                                     },
                                     Message::Have(h) => {
+                                        debug!("Seciding something something on send from peer channel");
                                         // update global torrent piece map
-                                        let _ = tx.send(PeerMsg::Have(h.piece_index));
+                                        // let _ = tx.send(PeerMsg::Have(h.piece_index)); // useless
                                         peer.bitfield.set(h.piece_index as usize, true);
                                     },
                                     Message::Bitfield(b) => {
@@ -923,7 +942,6 @@ async fn peer_handler(
                                                     recent_uploads.push((p.block.len(), elapsed_time));
                                                 }
 
-                                                // TODO - make not stupid
                                                 // remove head so that "recent" is actually true lol
                                                 while recent_uploads.len() > 5 {
                                                     recent_uploads.remove(0);
@@ -1064,6 +1082,14 @@ async fn peer_handler(
                         debug!("Received kill signal for {}", addr);
                         return Ok(());
                     },
+                    PeerCommand::HaveUpdate(i) => {
+                        debug!("Received have signal for index {}, {}", i, addr);
+                        if let Ok(len) = Message::Have(messages::Have{piece_index: i}).create(&mut stream_buf) {
+                            debug!("Sending have {} to {}", i, addr);
+                            (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                            peer.out_stream.flush().await?;
+                        }
+                    }
                     _ => {
                         debug!("Received weirdo signal for {}", addr);
                     }
@@ -1300,6 +1326,7 @@ pub struct ConnectedPeer {
 pub enum PeerCommand {
     Choke,
     UnChoke,
+    HaveUpdate(u32),
     Kill,
     NewStream(TcpStream),
 }
