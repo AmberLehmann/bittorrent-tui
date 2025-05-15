@@ -105,7 +105,11 @@ impl App {
 
             // TODO: check socket assosciated with each active torrent for information from tracker
             // if new peers have been found or this is the first reponse send that information to
-            // worker threads.
+            // worker threads
+            for t in &mut self.torrents {
+                let Ok(info) = t.3.try_recv() else { continue };
+                t.4 = info;
+            }
 
             // TODO: send periodic updates to tracker for each active torrent
         }
@@ -208,7 +212,15 @@ impl App {
         ]);
 
         let columns = [
-            "", "Name", "Size", "Progress", "Status", "Seeds", "Peers", "Speed", "TODO",
+            " ",
+            " Name",
+            " Size",
+            " Progress",
+            " Status",
+            " Seeds",
+            " Peers",
+            " Speed",
+            " TODO",
         ];
         let title_bar_areas: [_; 9] = horizontal.areas(title_bar);
         Block::new()
@@ -219,11 +231,17 @@ impl App {
         }
 
         for (torrent_name, _, _, _, torrent) in &self.torrents {
-            let [_icon, name, size, _progress, status, _seeds, _peers, _speed, _todo] =
+            let [_icon, name, size, mut progress, status, _seeds, _peers, _speed, _todo] =
                 horizontal.areas(canvas);
 
             Span::raw(torrent_name).render(name, buf);
             Span::raw(format!("{:?}", torrent.status)).render(status, buf);
+            Span::raw(format!("   %{}   ", torrent.progress)).render(progress, buf);
+            progress.height = 1;
+            progress.width = 10;
+            buf.set_style(progress, THEME.not_downloaded);
+            progress.width = torrent.progress as u16 / 10;
+            buf.set_style(progress, THEME.downloaded);
             Span::raw(convert_to_human(torrent.size)).render(size, buf);
 
             canvas.y += 1;

@@ -26,7 +26,7 @@ use std::{
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
     task::{Context, Poll},
-    time::Instant,
+    time::{Duration, Instant},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -100,6 +100,7 @@ impl Display for TorrentStatus {
     }
 }
 
+#[derive(Clone)]
 pub struct TorrentInfo {
     pub size: u64,
     pub progress: u8,
@@ -323,7 +324,7 @@ impl Torrent {
 
 pub async fn handle_torrent(
     torrent: Torrent,
-    _tx: UnboundedSender<TorrentInfo>,
+    tx: UnboundedSender<TorrentInfo>,
     _rx: UnboundedReceiver<TorrentStatus>,
 ) -> Result<(), TrackerError> {
     let left = match &torrent.meta_info.info {
@@ -342,11 +343,12 @@ pub async fn handle_torrent(
         no_peer_id: false,        // Ignored for compact
         // ip: Some(local_ipv4), // Temp default to ipv4, give user ability for ipv6
         ip: Some(torrent.local_addr.ip()), // Temp default to ipv4, give user ability for ipv6
-        announce_path: torrent.announce_path,
+        announce_path: torrent.announce_path.clone(),
         numwant: None, // temp default, give user ability to choose
         key: Some("rustyclient".into()),
         trackerid: None, // If a previous announce contained a tracker id, it should be set here.
     };
+    let mut status_info = torrent.get_info();
     let mut tracker_stream = TcpStream::connect(torrent.tracker_addr).await?;
     let http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
 
@@ -419,10 +421,12 @@ pub async fn handle_torrent(
 
     let tick_rate = std::time::Duration::from_millis(50);
     let mut interval = tokio::time::interval(tick_rate);
+    let mut tui_interval = tokio::time::interval(Duration::from_millis(500));
     let mut last_request = Instant::now();
     let mut buf = BytesMut::with_capacity(1024);
     loop {
         let delay = interval.tick();
+        let tui_update_delay = tui_interval.tick();
         // TODO: make actually async like peer_handler
         tokio::select! {
             tracker_resp = tracker_stream.read_buf(&mut buf) => {
@@ -439,6 +443,10 @@ pub async fn handle_torrent(
                 }
 
                 buf.clear();
+            },
+            _ = tui_update_delay => {
+                status_info.progress = (pieces_downloaded * 100 / torrent.pieces_data.len()) as u8;
+                tx.send(status_info.clone()).unwrap();
             },
             Ok((peer_stream, peer_addr)) = listener.accept() => {
 
@@ -593,8 +601,10 @@ async fn peer_handler(
     // randomized timeout
     let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
+    let mut tui_interval = tokio::time::interval(Duration::from_millis(500));
     loop {
         let delay = interval.tick();
+        let tui_update_delay = tui_interval.tick();
         tokio::select! {
             _ = peer.out_stream.readable() => {
                 // debug!("Reselected peer.out_stream.readable()");
