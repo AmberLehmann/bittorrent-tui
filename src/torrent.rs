@@ -532,7 +532,8 @@ async fn peer_handler(
     let mut len_buf = [0u8; 4];
     let mut stream_buf = vec![0u8; block_size + 50];
     let mut piece_buf = vec![0u8; piece_size];
-    let mut waiting = false;
+    let mut requested = None;
+    let mut blocks = vec![false; piece_size / block_size];
 
     if is_outgoing {
         if let Err(e) = do_outgoing_handshake(
@@ -675,7 +676,14 @@ async fn peer_handler(
                                     },
                                     Message::Piece(p) => {
                                         piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
-                                        // TODO: mark the bounds of this section as being filed
+                                        blocks[p.begin as usize / piece_size] = true;
+                                        let mut next = 0;
+                                        while next < blocks.len() { if !blocks[next] { break; } else { next += 1; }}
+                                        if next == blocks.len() {
+                                            // TODO: hashing
+                                        } else {
+                                            // reqest next lsp
+                                        }
                                     },
                                     Message::Cancel(c) => {},
                                     Message::Port(_p) => {
@@ -694,7 +702,7 @@ async fn peer_handler(
                 // debug!("Reselected delay");
                 // if we arent currently waiting for a reponse back from our peer and they arent
                 // choking us then claim one of the next rarest pieces and request it.
-                if !waiting && !peer.peer_choking {
+                if requested.is_none() && !peer.peer_choking {
                     let mut bytes_written = None;
                     {
                         let mut info = pieces_info.lock().unwrap();
@@ -702,10 +710,10 @@ async fn peer_handler(
                         let p = info.iter().enumerate().filter(|&(_, p)| p.status == PieceStatus::NotRequested).take(4).choose(&mut rand::rng());
                         match p {
                             Some((i, p)) => {
+                                requested = Some(i);
                                 info[i].status = PieceStatus::Requested;
                                 let Ok(b) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) else { continue };
                                 bytes_written = Some(b);
-                                waiting = true;
                             },
                             None => {
                                 // we have downloaded all pieces so no need to send anything
@@ -717,7 +725,6 @@ async fn peer_handler(
                     info!("requesting piece from {} ", peer.addr);
                     let bytes_written = (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await;
                     peer.out_stream.flush().await?;
-                    debug!("write returned {:?}, wrote {}", bytes_written, len);
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
@@ -839,7 +846,7 @@ async fn do_outgoing_handshake(
     peer_addr: SocketAddr,
     info_hash: HashedId20,
     peer_id: Option<PeerId20>,
-    mut handshake_msg: BytesMut,
+    handshake_msg: BytesMut,
     known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
 ) -> Result<(), DoHandshakeError> {
     debug!("Handling an outgoing handshake to {}", peer_addr);
