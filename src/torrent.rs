@@ -494,7 +494,9 @@ pub async fn handle_torrent(
                 let known_peers_clone = Arc::clone(&known_peers);
 
                 // for upload rate calculations
-                let peer_stats_2 : Arc<Mutex<PeerStats>> = Arc::new(Mutex::new(PeerStats{is_interested: false, upload_rate: 0.0}));
+                let peer_stats_2 : Arc<Mutex<PeerStats>> = Arc::new(
+                    Mutex::new(PeerStats{is_interested: false, upload_rate: 0.0})
+                );
                 let new_peer_stats_2 = Arc::clone(&peer_stats_2);
 
                 // also maybe it needs a lock? TODO
