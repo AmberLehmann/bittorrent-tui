@@ -4,15 +4,12 @@ use crate::{
     messages::{self, Message},
     metainfo::{Info, MetaInfo},
     popup::OpenTorrentResult,
-    tracker::{PeerInfo, TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
+    tracker::{TrackerError, TrackerRequest, TrackerRequestEvent, TrackerResponse},
     HashedId20, PeerId20, HANDSHAKE_LEN, PROTOCOL_V_1,
 };
-use bitvec::{
-    order::Msb0,
-    prelude::{BitSlice, BitVec},
-};
+use bitvec::{order::Msb0, prelude::BitVec};
 use byteorder::{ByteOrder, NetworkEndian};
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use log::{debug, error, info, warn};
 use rand::{
     distr::Alphanumeric, random_range, seq::index::sample_weighted, seq::IteratorRandom, Rng,
@@ -26,7 +23,6 @@ use std::{
     io::{Cursor, Read, Write},
     net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
-    task::{Context, Poll},
     time::{Duration, Instant},
 };
 use tokio::{
@@ -298,12 +294,7 @@ impl Torrent {
                         curr_offset += block_len;
                     }
 
-                    info!("need blocks {:?}", this_needed_requests);
-                    info!(
-                        "grabbing hash {} .. {}",
-                        piece_index * 20,
-                        (piece_index + 1) * 20
-                    );
+                    //info!("need blocks {:?}", this_needed_requests);
 
                     pieces_to_download_info.push(PieceInfo {
                         status: PieceStatus::NotRequested,
@@ -886,7 +877,7 @@ async fn peer_handler(
                 // either respond to request or
                 // timeout on reads is 2 seconds now
                 match timeout(
-                    tokio::time::Duration::from_secs(1),
+                    tokio::time::Duration::from_millis(500),
                     peer.out_stream.peek(&mut len_buf)
                 ).await {
                     Err(e) => {
@@ -927,7 +918,7 @@ async fn peer_handler(
                         // so read into a slice of a certain size? i think that should be fine
                         // timeout on reads is 2 seconds now
                         match timeout(
-                            tokio::time::Duration::from_secs(2),
+                            tokio::time::Duration::from_millis(500),
                             peer.out_stream.read_exact(&mut (stream_buf[0..msg_len]))
                         ).await {
                             Err(e) => {
@@ -1083,7 +1074,7 @@ async fn peer_handler(
 
                                         piece_buf[p.begin as usize..p.begin as usize + p.block.len()]
                                             .copy_from_slice(p.block);
-                                        info!("copying {} to {}", p.begin, p.block.len());
+                                        debug!("copying {} to {}", p.begin, p.block.len());
 
                                         let Some(ref mut pi) = &mut requested else { continue };
                                         pi.1.needed_requests[(p.begin as usize + block_size - 1) / block_size].status = BlockStatus::Confirmed;
@@ -1101,7 +1092,6 @@ async fn peer_handler(
                                         if next >= pi.1.needed_requests.len() {
                                             // TODO: hashing
                                             let id = hash_buffer(&piece_buf[..pi.1.length as usize]);
-                                            info!("hashing {}", std::str::from_utf8(&piece_buf[..pi.1.length as usize]).unwrap_or(""));
                                             if pi.1.hash != id {
                                                 {
                                                     let mut info = pieces_info.lock().unwrap();
@@ -1161,7 +1151,6 @@ async fn peer_handler(
                         let p = info.iter()
                                 .enumerate()
                                 .filter(|&(_, p)| p.status == PieceStatus::NotRequested)
-                                .take(4)
                                 .choose(&mut rand::rng());
                         match p {
                             Some((i, p)) => {
@@ -1186,6 +1175,9 @@ async fn peer_handler(
 
                     let Some(len) = bytes_written else { continue };
                     peer.out_stream.write_all(&mut stream_buf[..len]).await?;
+                } else {
+                    let Ok(b) = Message::Interested.create(&mut stream_buf) else { continue };
+                    peer.out_stream.write_all(&mut stream_buf[..b]).await?;
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
