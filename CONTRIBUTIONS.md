@@ -27,4 +27,6 @@
   - Update handshaking to allow for incoming peers and filter improper/duplicate handshakes
   - Update incoming data handling to deal with framed data in streams
   - Fixed bug where sent data was sending improper packet sizes
+  - Channels and logic for choking/unchoking/have piece updates
+  - Partial upload logic (couldn't get it to work but it uploads 2 pieces)
   
