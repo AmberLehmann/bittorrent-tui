@@ -677,12 +677,26 @@ async fn peer_handler(
                                     Message::Piece(p) => {
                                         piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
                                         blocks[p.begin as usize / piece_size] = true;
+
+                                        info!("{:?}", blocks);
                                         let mut next = 0;
-                                        while next < blocks.len() { if !blocks[next] { break; } else { next += 1; }}
+                                        while next < blocks.len() {
+                                            if !blocks[next] {
+                                                break;
+                                            } else {
+                                                next += 1;
+                                            }
+                                        }
+
                                         if next == blocks.len() {
                                             // TODO: hashing
+                                            info!("hashing piece");
                                         } else {
                                             // reqest next lsp
+                                            let Some(i) = requested else { continue };
+                                            let len = Message::Request(messages::Request {index: i as u32, begin: (block_size * next) as u32, length: block_size as u32}).create(&mut stream_buf).unwrap();
+                                            info!("requesting block {} from {} ", next, peer.addr);
+                                            let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
                                         }
                                     },
                                     Message::Cancel(c) => {},
@@ -722,9 +736,8 @@ async fn peer_handler(
                     }
 
                     let Some(len) = bytes_written else { continue };
-                    info!("requesting piece from {} ", peer.addr);
-                    let bytes_written = (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await;
-                    peer.out_stream.flush().await?;
+                    info!("requesting block 0 from {} ", peer.addr);
+                    let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
