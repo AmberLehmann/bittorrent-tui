@@ -138,6 +138,7 @@ pub struct PieceInfo {
     status: PieceStatus,
     needed_requests: Vec<BlockInfo>,
     num_havers: u32,
+    hash: HashedId20,
 }
 
 fn generate_peer_id() -> PeerId20 {
@@ -286,6 +287,9 @@ impl Torrent {
                         status: PieceStatus::NotRequested,
                         needed_requests: this_needed_requests,
                         num_havers: 0,
+                        hash: new_meta.info.pieces()[piece_index..piece_index + 20]
+                            .try_into()
+                            .unwrap(),
                     });
                 }
 
@@ -962,9 +966,15 @@ async fn peer_handler(
                                         if next >= blocks.len() {
                                             // TODO: hashing
                                             let id = hash_buffer(&piece_buf);
-                                            // TODO: compare hash to expected hash
-
-                                            let Some(ref pi) = requested else { continue };
+                                            let Some(ref mut pi) = &mut requested else { continue };
+                                            if pi.1.hash != id {
+                                                {
+                                                    let mut info = pieces_info.lock().unwrap();
+                                                    info[pi.0].status = PieceStatus::NotRequested;
+                                                }
+                                                requested = None;
+                                                continue;
+                                            }
                                             let mut wr = pieces_data[pi.0].write().unwrap();
                                             *wr = std::mem::take(&mut piece_buf);
                                             piece_buf = vec![0u8; piece_size];

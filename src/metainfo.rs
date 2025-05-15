@@ -51,6 +51,13 @@ impl Info {
             Info::Multi(f) => f.piece_length as usize,
         }
     }
+
+    pub fn pieces(&self) -> &[u8] {
+        match self {
+            Info::Single(f) => &f.pieces,
+            Info::Multi(f) => &f.pieces,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
