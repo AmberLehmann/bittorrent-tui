@@ -329,6 +329,8 @@ pub async fn handle_torrent(
     tx: UnboundedSender<TorrentInfo>,
     _rx: UnboundedReceiver<TorrentStatus>,
 ) -> Result<(), TrackerError> {
+    let demo = false;
+
     let left = match &torrent.meta_info.info {
         Info::Multi(_) => return Err(TrackerError::MultiFile),
         Info::Single(f) => f.length,
@@ -380,7 +382,9 @@ pub async fn handle_torrent(
         .peers
         .iter()
         .take(30)
-        .filter(|&p| p.addr != torrent.local_addr)
+        .filter(|&p| {
+            p.addr != torrent.local_addr && (demo && p.addr.ip() == torrent.local_addr.ip())
+        }) // change addr to ip + change to eq
         .map(|p| {
             let msg = handshake_msg.clone();
             let (cmd_tx, cmd_rx): (UnboundedSender<PeerCommand>, UnboundedReceiver<PeerCommand>) =
@@ -1105,7 +1109,7 @@ async fn peer_handler(
                             peer.am_choking = false;
                             if let Ok(len) = Message::UnChoke.create(&mut stream_buf) {
                                 debug!("Sending unchoke to {}", addr);
-                                peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                                peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..len])).await?;
                                 peer.out_stream.flush().await?;
                             }
                         }
