@@ -817,7 +817,10 @@ async fn peer_handler(
 
                 // either respond to request or
                 // timeout on reads is 2 seconds now
-                match timeout(tokio::time::Duration::from_secs(1), peer.out_stream.peek(&mut len_buf)).await {
+                match timeout(
+                    tokio::time::Duration::from_secs(1),
+                    peer.out_stream.peek(&mut len_buf)
+                ).await {
                     Err(e) => {
                         debug!("would block poll on peek v1: {e}, {addr}");
                         continue;
@@ -855,7 +858,10 @@ async fn peer_handler(
                         // will overread stream (TCP, not UDP)
                         // so read into a slice of a certain size? i think that should be fine
                         // timeout on reads is 2 seconds now
-                        match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.read_exact(&mut (stream_buf[0..msg_len]))).await {
+                        match timeout(
+                            tokio::time::Duration::from_secs(2),
+                            peer.out_stream.read_exact(&mut (stream_buf[0..msg_len]))
+                        ).await {
                             Err(e) => {
                                 debug!("would block poll on read v1: {e}, {addr}");
                                 continue;
@@ -906,7 +912,11 @@ async fn peer_handler(
 
                                         let Ok(b) = Message::Interested.create(&mut stream_buf) else { continue };
                                         //info!("saying I'm interested in {} ", peer.addr);
-                                        let bytes_written = peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..b])).await;
+                                        let bytes_written = peer.out_stream
+                                            .write_all_buf(
+                                                &mut Cursor::new(&mut stream_buf[..b])
+                                            )
+                                            .await;
                                         peer.out_stream.flush().await?;
                                         debug!("interested write returned {:?}, wrote {}", bytes_written, b);
                                     },
@@ -931,7 +941,9 @@ async fn peer_handler(
 
                                                 // recent_uploads is the (length of the block, the elapsed time)
                                                 // need to calculate general upload rate based off this
-                                                let (total_bytes, total_time): (usize, f64) = recent_uploads.iter().fold((0,0.0), |(l_sum, e_sum), (l, e)| (l_sum + l, e_sum + e));
+                                                let (total_bytes, total_time): (usize, f64) =
+                                                    recent_uploads.iter().fold((0,0.0),
+                                                        |(l_sum, e_sum), (l, e)| (l_sum + l, e_sum + e));
                                                 let upload_rate = if total_time > 0.0 { // time is weird
                                                     total_bytes as f64 / total_time
                                                 } else {
@@ -946,7 +958,8 @@ async fn peer_handler(
                                         }
                                         // end of upload rate tracking
 
-                                        piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
+                                        piece_buf[p.begin as usize..p.begin as usize + p.block.len()]
+                                            .copy_from_slice(p.block);
                                         blocks[p.begin as usize / block_size] = true;
 
                                         //info!("{:?}", blocks);
@@ -986,7 +999,10 @@ async fn peer_handler(
                                             ).create(&mut stream_buf).unwrap();
                                             //info!("requesting block {} from {} ", next, peer.addr);
                                             let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
-                                            pending_requests.insert((pi.0 as u32, (block_size * next) as u32), Instant::now()); // TODO - not just 0, interpolate with fixed logic
+                                            pending_requests.insert(
+                                                (pi.0 as u32, (block_size * next) as u32),
+                                                Instant::now()
+                                            ); // TODO - not just 0, interpolate with fixed logic
                                         }
                                     },
                                     Message::Cancel(c) => {},
