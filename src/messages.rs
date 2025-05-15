@@ -102,7 +102,7 @@ impl<'a> Message<'a> {
                 buf[5..].copy_from_slice(s.bitfield.to_bitvec().as_raw_slice());
             }
             Message::Request(s) => {
-                NetworkEndian::write_u32(buf, 13);
+                NetworkEndian::write_u32(&mut buf[0..4], 13);
                 buf[4] = 6;
                 NetworkEndian::write_u32(&mut buf[5..9], s.index);
                 NetworkEndian::write_u32(&mut buf[9..13], s.begin);

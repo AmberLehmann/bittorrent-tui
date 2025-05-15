@@ -524,7 +524,7 @@ async fn peer_handler(
     let mut last_response = Instant::now();
     info!("connected to {addr}");
 
-    let block_size: usize = 1 << 16; // handle slightly bigger size? (i set it to 16 not 15)
+    let block_size: usize = 1 << 14; // handle slightly bigger size? (i set it to 16 not 15)
     let mut len_buf = [0u8; 4];
     let mut stream_buf = vec![0u8; block_size + 50];
     let mut piece_buf = vec![0u8; piece_size];
@@ -704,7 +704,8 @@ async fn peer_handler(
                     }
 
                     let Some(len) = bytes_written else { continue };
-                    peer.out_stream.write(&stream_buf[..len]).await?;
+                    info!("requesting piece from");
+                    peer.out_stream.write_all(&stream_buf[..len]).await?;
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
