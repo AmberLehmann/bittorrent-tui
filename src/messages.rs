@@ -251,11 +251,9 @@ impl<'a> Message<'a> {
                 _ => Message::Unknown,
             }
         };
-
         Ok(msg) // return message + remaining buffer
     }
 }
-
 // NOTE: Use `cargo test -- --show-output`.
 // #[cfg(test)]
 // mod tests {
