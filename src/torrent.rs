@@ -662,6 +662,12 @@ async fn peer_handler(
                                         // update global torrent piece map
                                         peer.bitfield = b.bitfield.to_bitvec();
                                         let _ = tx.send(PeerMsg::Field(peer.bitfield.clone()));
+
+                                        let Ok(b) = Message::Interested.create(&mut stream_buf) else { continue };
+                                        info!("saying I'm interested in {} ", peer.addr);
+                                        let bytes_written = (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..b][..])).await;
+                                        peer.out_stream.flush().await?;
+                                        debug!("interested write returned {:?}, wrote {}", bytes_written, b);
                                     },
                                     Message::Request(r) => {
                                         // check if we have the piece then send it if we do and if we arent
