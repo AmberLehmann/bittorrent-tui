@@ -923,6 +923,7 @@ async fn peer_handler(
                                                     recent_uploads.push((p.block.len(), elapsed_time));
                                                 }
 
+                                                // TODO - make not stupid
                                                 // remove head so that "recent" is actually true lol
                                                 while recent_uploads.len() > 5 {
                                                     recent_uploads.remove(0);
