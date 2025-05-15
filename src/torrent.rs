@@ -494,7 +494,9 @@ pub async fn handle_torrent(
                 let known_peers_clone = Arc::clone(&known_peers);
 
                 // for upload rate calculations
-                let peer_stats_2 : Arc<Mutex<PeerStats>> = Arc::new(Mutex::new(PeerStats{is_interested: false, upload_rate: 0.0}));
+                let peer_stats_2 : Arc<Mutex<PeerStats>> = Arc::new(
+                    Mutex::new(PeerStats{is_interested: false, upload_rate: 0.0})
+                );
                 let new_peer_stats_2 = Arc::clone(&peer_stats_2);
 
                 // also maybe it needs a lock? TODO
@@ -835,7 +837,10 @@ async fn peer_handler(
 
                 // either respond to request or
                 // timeout on reads is 2 seconds now
-                match timeout(tokio::time::Duration::from_secs(1), peer.out_stream.peek(&mut len_buf)).await {
+                match timeout(
+                    tokio::time::Duration::from_secs(1),
+                    peer.out_stream.peek(&mut len_buf)
+                ).await {
                     Err(e) => {
                         debug!("would block poll on peek v1: {e}, {addr}");
                         continue;
@@ -873,7 +878,10 @@ async fn peer_handler(
                         // will overread stream (TCP, not UDP)
                         // so read into a slice of a certain size? i think that should be fine
                         // timeout on reads is 2 seconds now
-                        match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.read_exact(&mut (stream_buf[0..msg_len]))).await {
+                        match timeout(
+                            tokio::time::Duration::from_secs(2),
+                            peer.out_stream.read_exact(&mut (stream_buf[0..msg_len]))
+                        ).await {
                             Err(e) => {
                                 debug!("would block poll on read v1: {e}, {addr}");
                                 continue;
@@ -925,7 +933,11 @@ async fn peer_handler(
 
                                         let Ok(b) = Message::Interested.create(&mut stream_buf) else { continue };
                                         //info!("saying I'm interested in {} ", peer.addr);
-                                        let bytes_written = (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..b][..])).await;
+                                        let bytes_written = peer.out_stream
+                                            .write_all_buf(
+                                                &mut Cursor::new(&mut stream_buf[..b])
+                                            )
+                                            .await;
                                         peer.out_stream.flush().await?;
                                         debug!("interested write returned {:?}, wrote {}", bytes_written, b);
                                     },
@@ -949,7 +961,9 @@ async fn peer_handler(
 
                                                 // recent_uploads is the (length of the block, the elapsed time)
                                                 // need to calculate general upload rate based off this
-                                                let (total_bytes, total_time): (usize, f64) = recent_uploads.iter().fold((0,0.0), |(l_sum, e_sum), (l, e)| (l_sum + l, e_sum + e));
+                                                let (total_bytes, total_time): (usize, f64) =
+                                                    recent_uploads.iter().fold((0,0.0),
+                                                        |(l_sum, e_sum), (l, e)| (l_sum + l, e_sum + e));
                                                 let upload_rate = if total_time > 0.0 { // time is weird
                                                     total_bytes as f64 / total_time
                                                 } else {
@@ -964,7 +978,8 @@ async fn peer_handler(
                                         }
                                         // end of upload rate tracking
 
-                                        piece_buf[p.begin as usize..p.begin as usize + p.block.len()].copy_from_slice(p.block);
+                                        piece_buf[p.begin as usize..p.begin as usize + p.block.len()]
+                                            .copy_from_slice(p.block);
                                         blocks[p.begin as usize / block_size] = true;
 
                                         //info!("{:?}", blocks);
@@ -995,10 +1010,19 @@ async fn peer_handler(
                                         } else {
                                             // reqest next lsp
                                             let Some(ref pi) = requested else { continue };
-                                            let len = Message::Request(messages::Request {index: pi.0 as u32, begin: (block_size * next) as u32, length: block_size as u32}).create(&mut stream_buf).unwrap();
+                                            let len = Message::Request(
+                                                messages::Request {
+                                                    index: pi.0 as u32,
+                                                    begin: (block_size * next) as u32,
+                                                    length: block_size as u32
+                                                }
+                                            ).create(&mut stream_buf).unwrap();
                                             //info!("requesting block {} from {} ", next, peer.addr);
                                             let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
-                                            pending_requests.insert((pi.0 as u32, (block_size * next) as u32), Instant::now()); // TODO - not just 0, interpolate with fixed logic
+                                            pending_requests.insert(
+                                                (pi.0 as u32, (block_size * next) as u32),
+                                                Instant::now()
+                                            ); // TODO - not just 0, interpolate with fixed logic
                                         }
                                     },
                                     Message::Cancel(c) => {},
@@ -1023,12 +1047,21 @@ async fn peer_handler(
                     {
                         let mut info = pieces_info.lock().unwrap();
                         // this is not rarest first, just random TODO: make rarest first
-                        let p = info.iter().enumerate().filter(|&(_, p)| p.status == PieceStatus::NotRequested).take(4).choose(&mut rand::rng());
+                        let p = info.iter()
+                                .enumerate()
+                                .filter(|&(_, p)| p.status == PieceStatus::NotRequested)
+                                .take(4)
+                                .choose(&mut rand::rng());
                         match p {
                             Some((i, p)) => {
                                 requested = Some((i, p.clone()));
                                 info[i].status = PieceStatus::Requested;
-                                let Ok(b) = Message::Request(messages::Request {index: i as u32, begin: 0, length: block_size as u32}).create(&mut stream_buf) else { continue };
+                                let Ok(b) = Message::Request(
+                                        messages::Request {
+                                            index: i as u32,
+                                            begin: 0,
+                                            length: block_size as u32
+                                        }).create(&mut stream_buf) else { continue };
                                 bytes_written = Some(b);
                                 // for tracking upload rate
                                 pending_requests.insert((i as u32, 0), Instant::now()); // TODO - not just 0, interpolate with fixed logic
@@ -1059,7 +1092,7 @@ async fn peer_handler(
                             peer.am_choking = true;
                             if let Ok(len) = Message::Choke.create(&mut stream_buf) {
                                 debug!("Sending choke to {}", addr);
-                                (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                                peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..len])).await?;
                                 peer.out_stream.flush().await?;
                             }
                         }
@@ -1072,7 +1105,7 @@ async fn peer_handler(
                             peer.am_choking = false;
                             if let Ok(len) = Message::UnChoke.create(&mut stream_buf) {
                                 debug!("Sending unchoke to {}", addr);
-                                (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                                peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
                                 peer.out_stream.flush().await?;
                             }
                         }
