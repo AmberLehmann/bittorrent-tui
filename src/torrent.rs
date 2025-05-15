@@ -642,7 +642,7 @@ async fn peer_handler(
                                 debug!("read {bytes_read} bytes");
                                 // parse and handle response message from peer
                                 let Ok(msg) = Message::parse(&(stream_buf[0..msg_len])) else { continue };
-                                debug!("read {msg:?}, {addr}");
+                                debug!("read {msg}, {addr}");
 
 
                                 // not every message can be recieved from this connection but good to
@@ -708,7 +708,8 @@ async fn peer_handler(
 
                     let Some(len) = bytes_written else { continue };
                     info!("requesting piece from {} ", peer.addr);
-                    peer.out_stream.write_all(&stream_buf[..len]).await?;
+                    let bytes_written = peer.out_stream.write_all(&stream_buf[..len]).await;
+                    debug!("write returned {:?}", bytes_written);
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
