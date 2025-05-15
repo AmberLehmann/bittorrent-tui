@@ -1,0 +1,99 @@
+INFO: torrent.rs:176: open_torrent() read 451 bytes
+INFO: torrent.rs:204: Tracker address: http://cerf.cs.umd.edu:8000/announce
+DEBUG: torrent.rs:227: new_announce_path: /announce
+DEBUG: torrent.rs:239: new_scrape_path: Some("/scrape")
+INFO: torrent.rs:352: Sent initial request to tracker.
+TRACE: tracker.rs:206: Deserializing peers in compact format.
+TRACE: tracker.rs:174: Tracker response received: client assigned 17 peers.
+DEBUG: torrent.rs:362: Binding listening socket at 10.174.215.26:45123
+DEBUG: torrent.rs:364: Server is listening.
+INFO: torrent.rs:525: connected to 128.8.130.86:8002
+DEBUG: torrent.rs:830: Handling an outgoing handshake to 128.8.130.86:8002
+DEBUG: torrent.rs:846: Read the handshake from 128.8.130.86:8002
+DEBUG: torrent.rs:859: Confirmed protocol from 128.8.130.86:8002
+DEBUG: torrent.rs:873: Confirmed info_hash from 128.8.130.86:8002
+DEBUG: torrent.rs:881: Got peer_id from 128.8.130.86:8002
+DEBUG: torrent.rs:903: This peer id=[45, 87, 87, 48, 50, 48, 54, 45, 57, 48, 69, 47, 56, 82, 75, 101, 121, 86, 84, 47] was not a known peer, good, allowing connection! 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 3, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 7, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 7 bytes
+DEBUG: torrent.rs:642: read Bitfield(Bitfield { bitfield: BitSlice<u8, bitvec::order::Msb0> { addr: 0x7fbf40000f95, head: 000, bits: 16 } [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0] }), 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 1, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 5, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 5 bytes
+DEBUG: torrent.rs:642: read UnChoke, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+INFO: torrent.rs:443: 10.174.178.188:63618 attempting to connect
+INFO: torrent.rs:525: connected to 10.174.178.188:63618
+DEBUG: torrent.rs:734: Handling an incoming handshake from 10.174.178.188:63618
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
+DEBUG: torrent.rs:613: Read msg_len - 4 as 0, 128.8.130.86:8002
+DEBUG: torrent.rs:618: stream_buf[0..msg_len].len() = 4, 128.8.130.86:8002
+DEBUG: torrent.rs:639: read 4 bytes
+DEBUG: torrent.rs:642: read KeepAlive, 128.8.130.86:8002
+DEBUG: torrent.rs:588: would block poll on peek v1: deadline has elapsed, 128.8.130.86:8002
