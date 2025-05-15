@@ -846,7 +846,7 @@ async fn do_outgoing_handshake(
     peer_addr: SocketAddr,
     info_hash: HashedId20,
     peer_id: Option<PeerId20>,
-    mut handshake_msg: BytesMut,
+    handshake_msg: BytesMut,
     known_peers: Arc<Mutex<HashMap<PeerId20, SocketAddr>>>,
 ) -> Result<(), DoHandshakeError> {
     debug!("Handling an outgoing handshake to {}", peer_addr);
