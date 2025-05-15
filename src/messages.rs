@@ -2,6 +2,7 @@ use bitvec::order::Msb0;
 use bitvec::prelude::BitSlice;
 use bitvec::view::BitView;
 use byteorder::{ByteOrder, NetworkEndian, WriteBytesExt};
+use std::fmt::Display;
 use std::io::{self, Result, Seek, Write};
 
 #[derive(Debug)]
@@ -60,6 +61,29 @@ pub enum Message<'a> {
     Cancel(Cancel),         // <len=0013><id=8><index><begin><length>
     Port(Port),             // <len=0003><id=9><listen-port>
     Unknown,
+}
+
+impl Display for Message<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Message::KeepAlive => "KeepAlive",
+                Message::Choke => "Choke",
+                Message::UnChoke => "UnChoke",
+                Message::Interested => "Interested",
+                Message::NotInterested => "NotInterested",
+                Message::Have(_) => "Have",
+                Message::Bitfield(_) => "Bitfield",
+                Message::Request(_) => "Request",
+                Message::Piece(_) => "Piece",
+                Message::Cancel(_) => "Cancel",
+                Message::Port(_) => "Port",
+                Message::Unknown => "Unknown",
+            }
+        )
+    }
 }
 
 impl<'a> Message<'a> {

@@ -707,7 +707,7 @@ async fn peer_handler(
                     }
 
                     let Some(len) = bytes_written else { continue };
-                    info!("requesting piece from");
+                    info!("requesting piece from {} ", peer.addr);
                     peer.out_stream.write_all(&stream_buf[..len]).await?;
                 }
                 // debug!("Delay");
