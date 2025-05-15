@@ -588,7 +588,7 @@ async fn peer_handler(
 
                 // either respond to request or
                 // timeout on reads is 2 seconds now
-                match timeout(tokio::time::Duration::from_secs(2), peer.out_stream.peek(&mut len_buf)).await {
+                match timeout(tokio::time::Duration::from_secs(1), peer.out_stream.peek(&mut len_buf)).await {
                     Err(e) => {
                         debug!("would block poll on peek v1: {e}, {addr}");
                         continue;
