@@ -259,7 +259,6 @@ where
                     },
                 });
             }
-            log::debug!("peers: {:?}", peers);
             Ok(peers)
         }
     }
