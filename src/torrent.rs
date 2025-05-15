@@ -737,7 +737,7 @@ async fn peer_handler(
 
                     let Some(len) = bytes_written else { continue };
                     info!("requesting block 0 from {} ", peer.addr);
-                    let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
+                    peer.out_stream.write_all(&mut stream_buf[..len]).await?;
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
