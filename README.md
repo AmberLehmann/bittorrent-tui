@@ -1,5 +1,5 @@
 ## Rusty Implementation of BitTorrent 
-WIP BitTorrent client implementation for CMSC417 written in Rust.
+WIP BitTorrent client implementation written in Rust.
 
 ## Usage
 To run the BitTorrent client in TUI mode: 
