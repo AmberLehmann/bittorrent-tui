@@ -164,7 +164,7 @@ pub struct Torrent {
     pub local_addr: SocketAddr,
     // the data in the u8 vec, the status, the length that we know about
     pub pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
-    pub pieces_data: Arc<Vec<RwLock<Vec<u8>>>>,
+    pub pieces_data: Arc<Vec<Mutex<Vec<u8>>>>,
 }
 
 impl Torrent {
@@ -243,8 +243,7 @@ impl Torrent {
         match &new_meta.info {
             Info::Single(info_stuff) => {
                 // get number of pieces to download
-                let num_pieces = ((info_stuff.length + info_stuff.piece_length - 1)
-                    / info_stuff.piece_length) as usize;
+                let num_pieces = info_stuff.length.div_ceil(info_stuff.piece_length) as usize;
                 info!(
                     "need {} {} byte pieces",
                     num_pieces, info_stuff.piece_length
@@ -254,24 +253,23 @@ impl Torrent {
                 let mut pieces_to_download_data = Vec::new();
                 for piece_index in 0..num_pieces {
                     // how long is this piece
-                    //let this_piece_len = if info_stuff.length % info_stuff.piece_length == 0 {
-                    //    info_stuff.piece_length
-                    //} else {
-                    //    info_stuff.length % info_stuff.piece_length
-                    //} as u32;
-                    let this_piece_len =
-                        if (info_stuff.piece_length as u64 * (piece_index as u64 + 1)) as u64
-                            > info_stuff.length
-                        {
-                            (info_stuff.length
-                                - (info_stuff.piece_length as u64 * piece_index as u64) as u64)
-                                as u32
+
+                    let this_piece_len = if piece_index as u64
+                        == info_stuff.length.div_ceil(info_stuff.piece_length) - 1
+                    {
+                        // Last piece
+                        let remaining = info_stuff.length % info_stuff.piece_length;
+                        if remaining == 0 {
+                            info_stuff.piece_length
                         } else {
-                            info_stuff.piece_length as u32
-                        };
+                            remaining
+                        }
+                    } else {
+                        info_stuff.piece_length
+                    } as u32;
                     // prep spot to put that data
                     pieces_to_download_data
-                        .push(RwLock::new(Vec::with_capacity(this_piece_len as usize)));
+                        .push(Mutex::new(Vec::with_capacity(this_piece_len as usize)));
 
                     // what do we know about this piece
 
@@ -429,7 +427,7 @@ pub async fn handle_torrent(
             let peer_stats_1: Arc<Mutex<PeerStats>> = Arc::new(Mutex::new(PeerStats {
                 is_interested: false,
                 upload_rate: 0.0,
-                download_rate: 0.0
+                download_rate: 0.0,
             }));
             let new_peer_stats_1 = Arc::clone(&peer_stats_1);
 
@@ -565,7 +563,12 @@ pub async fn handle_torrent(
                     PeerMsg::Confirmed(i) => {
                         debug!("That thing was a confirmed");
                         pieces_downloaded += 1;
-                        info!("downloaded piece {}, {}/{}, sending updates to peer threads", i, pieces_downloaded, torrent.pieces_data.len());
+                        info!(
+                            "downloaded piece {}, {}/{}, sending updates to peer threads",
+                            i,
+                            pieces_downloaded,
+                            torrent.pieces_data.len()
+                        );
                         // send HaveUpdate to all peers
                         for (addr, entry) in &peer_handlers {
                             let _ = entry.sender.send(PeerCommand::HaveUpdate(i as u32));
@@ -580,8 +583,8 @@ pub async fn handle_torrent(
                     }?;
 
                     for p_lock in torrent.pieces_data.iter() {
-                        let p = p_lock.read().unwrap();
-                        f.write_all(&*p)?;
+                        let p = p_lock.lock().unwrap();
+                        f.write_all(&p)?;
                     }
                 }
             }
@@ -594,8 +597,8 @@ pub async fn handle_torrent(
                     if request.event.is_some() {
                        request.event = None;
                     }
-                    let http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
-                    tracker_stream.write_all(&http_msg).await?; // NOTE: Causes Pipe Error (BAD) - maybe change helps?
+                    let mut http_msg = request.encode_http_get(torrent.meta_info.announce.clone());
+                    tracker_stream.write_all_buf(&mut http_msg).await?;
                 }
                 // send periodic update to tracker TODO
                 // receive it somewhere TODO
@@ -646,7 +649,6 @@ pub async fn handle_torrent(
                             let (_, entry) = candidates[i];
                             if entry.is_new {3} else {1}
                         };
-
                         // what if there's nothing left, we had the 1 connection? that would suck :(
                         if candidates.is_empty() {
                             debug!("delay_command_o: wtf2");
@@ -655,7 +657,12 @@ pub async fn handle_torrent(
                             debug!("delay_command_o: choosing optimistic unchoke");
                             // choose something
                             // rust book says https://docs.rs/rand/latest/rand/seq/index/fn.sample_weighted.html
-                            let the_chosen_index = (sample_weighted(&mut rand::rng(), candidates.len(), weight_fn, 1).unwrap()).into_iter().next().unwrap();
+                            let the_chosen_index =
+                                (sample_weighted(&mut rand::rng(), candidates.len(), weight_fn, 1)
+                                    .unwrap())
+                                    .into_iter()
+                                    .next()
+                                    .unwrap();
                             let (selected_peer, _) = candidates[the_chosen_index];
 
                             debug!("delay_command_o: chose {}", selected_peer);
@@ -720,7 +727,9 @@ pub async fn handle_torrent(
                         })
                         .collect();
                     // sort by upload rate
-                    relevant_peers.sort_by(|a, b| (b.1.upload_rate / b.1.download_rate).partial_cmp(&(a.1.upload_rate / a.1.download_rate)).unwrap_or(std::cmp::Ordering::Equal));
+                    relevant_peers.sort_by(|a, b| (b.1.upload_rate / b.1.download_rate)
+                        .partial_cmp(&(a.1.upload_rate / a.1.download_rate))
+                        .unwrap_or(std::cmp::Ordering::Equal));
 
                     // unchoke the 4 peers who *are interested* and have the best upload rate
                     // unchoke all peers with better upload rate than those 4
@@ -770,7 +779,7 @@ async fn peer_handler(
     info_hash: HashedId20,
     piece_size: usize,
     pieces_info: Arc<Mutex<Vec<PieceInfo>>>,
-    pieces_data: Arc<Vec<RwLock<Vec<u8>>>>,
+    pieces_data: Arc<Vec<Mutex<Vec<u8>>>>,
     mut handshake_msg: BytesMut,
     tx: UnboundedSender<PeerMsg>,
     mut cmd_rx: UnboundedReceiver<PeerCommand>,
@@ -834,29 +843,27 @@ async fn peer_handler(
             let _ = tx.send(PeerMsg::Closed);
             return Err(tokio::io::Error::new(
                 tokio::io::ErrorKind::Other,
-                format!("Handshake failed"),
+                "Handshake failed",
             ));
         }
-    } else {
-        if let Err(e) = do_incoming_handshake(
-            &mut peer.out_stream,
-            addr,
-            info_hash,
-            peer_id,
-            handshake_msg,
-            Arc::clone(&known_peers),
-        )
-        .await
-        {
-            error!("Handshake error, returning from peer_handler");
-            // stream should be closed
-            debug!("Stream closed, {addr}");
-            let _ = tx.send(PeerMsg::Closed);
-            return Err(tokio::io::Error::new(
-                tokio::io::ErrorKind::Other,
-                format!("Handshake failed"),
-            ));
-        }
+    } else if let Err(e) = do_incoming_handshake(
+        &mut peer.out_stream,
+        addr,
+        info_hash,
+        peer_id,
+        handshake_msg,
+        Arc::clone(&known_peers),
+    )
+    .await
+    {
+        error!("Handshake error, returning from peer_handler");
+        // stream should be closed
+        debug!("Stream closed, {addr}");
+        let _ = tx.send(PeerMsg::Closed);
+        return Err(tokio::io::Error::new(
+            tokio::io::ErrorKind::Other,
+            "Handshake failed",
+        ));
     }
 
     // Handshake successful, increment number of peers
@@ -864,7 +871,7 @@ async fn peer_handler(
     // randomized timeout
     let tick_rate = std::time::Duration::from_millis(random_range(90..120));
     let mut interval = tokio::time::interval(tick_rate);
-    let mut tui_interval = tokio::time::interval(Duration::from_millis(100));
+    let mut tui_interval = tokio::time::interval(Duration::from_millis(500));
     loop {
         let delay = interval.tick();
         let tui_update_delay = tui_interval.tick();
@@ -904,13 +911,30 @@ async fn peer_handler(
                         continue;
                     }
                     Ok(Ok(_)) => {
+
+                        const MAX_MSG_SIZE: usize = 1024 * 1024; // 256 KiB
+                        let payload_len = NetworkEndian::read_u32(&len_buf) as usize;
+                        if payload_len > MAX_MSG_SIZE {
+                            warn!(
+                                "Message size {} exceeds max allowed {}, from {}. Disconnecting.",
+                                payload_len,
+                                MAX_MSG_SIZE,
+                                addr
+                            );
+                            let _ = tx.send(PeerMsg::Closed);
+                            return Ok(()); // or return Err(...) if you want to trigger peer cleanup upstream
+                        }
+
+                        // Then msg_len is payload_len + 4
+                        let msg_len = payload_len + 4;
                         // read len_buf
-                        let msg_len = (NetworkEndian::read_u32(&len_buf) as usize) + 4;
                         debug!("Read msg_len - 4 as {}, {addr}", msg_len - 4);
                         // prepare to consume at least that much
+
                         if stream_buf.len() < msg_len {
                             stream_buf.resize(msg_len, 0u8);
                         }
+
                         debug!("stream_buf[0..msg_len].len() = {}, {addr}", stream_buf[0..msg_len].len());
 
                         // must read in exactly that many bytes, otherwise
@@ -1077,7 +1101,9 @@ async fn peer_handler(
                                         debug!("copying {} to {}", p.begin, p.block.len());
 
                                         let Some(ref mut pi) = &mut requested else { continue };
-                                        pi.1.needed_requests[(p.begin as usize + block_size - 1) / block_size].status = BlockStatus::Confirmed;
+                                        pi.1.needed_requests[
+                                            (p.begin as usize).div_ceil(block_size)
+                                        ].status = BlockStatus::Confirmed;
 
                                         //info!("{:?}", blocks);
                                         let mut next = 0;
@@ -1101,8 +1127,9 @@ async fn peer_handler(
                                                 warn!("Hash did not match");
                                                 continue;
                                             }
-                                            let mut wr = pieces_data[pi.0].write().unwrap();
-                                            *wr = std::mem::take(&mut piece_buf);
+
+                                            let mut wr = pieces_data[pi.0].lock().unwrap();
+                                            *wr = piece_buf[..pi.1.length as usize].to_vec();
                                             piece_buf = vec![0u8; piece_size];
                                             {
                                                 let mut info = pieces_info.lock().unwrap();
@@ -1119,7 +1146,7 @@ async fn peer_handler(
                                                     length: pi.1.needed_requests[next].length,
                                                 }
                                             ).create(&mut stream_buf).unwrap();
-                                            let bytes_written = peer.out_stream.write_all(&mut stream_buf[..len]).await;
+                                            let bytes_written = peer.out_stream.write_all(&stream_buf[..len]).await;
                                             pending_requests.insert(
                                                 (pi.0 as u32, (block_size * next) as u32),
                                                 Instant::now()
@@ -1174,10 +1201,10 @@ async fn peer_handler(
                     }
 
                     let Some(len) = bytes_written else { continue };
-                    peer.out_stream.write_all(&mut stream_buf[..len]).await?;
+                    peer.out_stream.write_all(&stream_buf[..len]).await?;
                 } else {
                     let Ok(b) = Message::Interested.create(&mut stream_buf) else { continue };
-                    peer.out_stream.write_all(&mut stream_buf[..b]).await?;
+                    peer.out_stream.write_all(&stream_buf[..b]).await?;
                 }
                 // debug!("Delay");
                 // set a timer and if the request takes too long or cancle it and update info so
@@ -1188,7 +1215,7 @@ async fn peer_handler(
             Some(cmd) = cmd_rx.recv() => { // for the choke unchoke shit
                 match cmd {
                     PeerCommand::Choke => {
-                        if peer.am_choking == true {
+                        if peer.am_choking {
                             debug!("Received choke signal for {}, but was already choking", addr);
                             // do nothing
                         } else {
@@ -1201,7 +1228,7 @@ async fn peer_handler(
                         }
                     },
                     PeerCommand::UnChoke => {
-                        if peer.am_choking == false {
+                        if !peer.am_choking {
                             debug!("Received unchoke signal for {}, but was already unchoked", addr);
                             // do nothing
                         } else {
@@ -1222,7 +1249,7 @@ async fn peer_handler(
                         debug!("Received have signal for index {}, {}", i, addr);
                         if let Ok(len) = Message::Have(messages::Have{piece_index: i}).create(&mut stream_buf) {
                             debug!("Sending have {} to {}", i, addr);
-                            (&mut peer.out_stream).write_all_buf(&mut Cursor::new(&mut stream_buf[..len][..])).await?;
+                            peer.out_stream.write_all_buf(&mut Cursor::new(&mut stream_buf[..len])).await?;
                             peer.out_stream.flush().await?;
                         }
                     }
@@ -1303,12 +1330,13 @@ async fn do_incoming_handshake(
     debug!("Sent handshake to {}", peer_addr);
 
     // receive and check their peer_id against known_peers to check if we need to close the connection
-    let mut their_id = [0u8; 20]; // 20 for peer-id
-    let res = stream.read_exact(&mut their_id).await;
+    let mut handshake_buf = vec![0x0; 20]; // 20 for peer-id
+    let res = stream.read_to_end(&mut handshake_buf).await;
     if let Err(e) = res {
         error!("Could not read peer_id: {e}");
         return Err(DoHandshakeError::BadRead);
     }
+    let remote_id: PeerId20 = handshake_buf.try_into().expect("Expected 20 byte vec");
 
     debug!("Got peer_id from {}", peer_addr);
 
@@ -1319,8 +1347,8 @@ async fn do_incoming_handshake(
             return Err(DoHandshakeError::FailedLock);
         }
         Ok(mut known_peers_writer) => {
-            if known_peers_writer.contains_key(&their_id) {
-                debug!("Already connected to id={:?}, {}", &their_id, peer_addr);
+            if known_peers_writer.contains_key(&remote_id) {
+                debug!("Already connected to id={:?}, {}", &remote_id, peer_addr);
                 drop(known_peers_writer);
                 return Err(DoHandshakeError::DuplicatePeerId);
             } else if known_peers_writer.len() >= 55 {
@@ -1330,9 +1358,9 @@ async fn do_incoming_handshake(
             }
             debug!(
                 "This peer id={:?} was not a known peer {}",
-                &their_id, peer_addr
+                &remote_id, peer_addr
             );
-            known_peers_writer.insert(their_id, peer_addr);
+            known_peers_writer.insert(remote_id, peer_addr);
             drop(known_peers_writer);
         }
     }
@@ -1471,7 +1499,7 @@ pub enum PeerCommand {
 pub struct PeerStats {
     pub is_interested: bool,
     pub upload_rate: f64,
-    pub download_rate: f64
+    pub download_rate: f64,
 }
 
 #[derive(Debug)]
