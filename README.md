@@ -6,7 +6,7 @@ To run the BitTorrent client in TUI mode:
 `cargo run`
 
 ## Key Mappings
-
+![TUI prototype](/image.png)
 ### Main Menu
 
 | Key | Action |
